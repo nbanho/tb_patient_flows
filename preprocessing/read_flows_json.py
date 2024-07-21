@@ -5,7 +5,7 @@ import pandas as pd
 def event_json_to_dataframe(file_path):
 	"""
 	Reads a JSON file containing event data and converts it into a pandas DataFrame.
-
+	
 	:param file_path: The file path to the JSON file.
 	:return: A pandas DataFrame containing the event data.
 	"""
@@ -45,7 +45,8 @@ def event_json_to_dataframe(file_path):
 	
 	# Convert the data list into a pandas DataFrame
 	df = pd.DataFrame(data_list, columns=['time', 'track_id', 'type', 'position_x', 'position_y', 'person_height', 'gender', 'tag', 'face_mask', 'view_direction_x', 'view_direction_y', 'members', 'members_with_tag'])
-	
+	# Shift time by two hours
+	df['time'] = df['time'] + 2 * 60 * 60 * 1000
 	return df
 
 # load data
@@ -110,7 +111,7 @@ def process_event_files_in_folder(folder_path, output_csv_path):
 	# Separate the combined dataframe into a list of dataframes by day
 	daily_dfs = separate_by_day(combined_df)
 	# Filter each daily dataframe to include only daytime data
-	filtered_dfs = [filter_daytime(df, 4, 16) for df in daily_dfs]
+	filtered_dfs = [filter_daytime(df, 6, 18) for df in daily_dfs]
 	# Save each data frame to a separate CSV file
 	for df in filtered_dfs:
 		if df.empty:

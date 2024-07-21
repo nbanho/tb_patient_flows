@@ -72,7 +72,7 @@ def annotate_xy(df: pd.DataFrame, polygon: Polygon, col_name: str) -> pd.DataFra
 
 # process data
 
-def process_file(filename, in_fold_path, out_fold_path, time_filter, distance_filter, entry_polygon, seating_polygon, tb_cs_polygon, tb_pat_polygon):
+def process_file(filename, in_fold_path, out_fold_path, time_filter, distance_filter, entry_polygon, seating_polygon, tb_cs_polygon, tb_pat_polygon, vit_pat_polygon):
 		print(f"Processing file: {os.path.join(in_fold_path, filename)}")
 		df = pd.read_csv(os.path.join(in_fold_path, filename))
 		df = filter_tracks(df, time_filter, distance_filter)
@@ -80,6 +80,7 @@ def process_file(filename, in_fold_path, out_fold_path, time_filter, distance_fi
 		df = annotate_xy(df, seating_polygon, 'in_seating')
 		df = annotate_xy(df, tb_cs_polygon, 'in_tb_cs')
 		df = annotate_xy(df, tb_pat_polygon, 'in_tb_pat')
+		df = annotate_xy(df, vit_pat_polygon, 'in_vitals_pat')
 		df.to_csv(os.path.join(out_fold_path, filename), index=False)
 
 if __name__ == "__main__":
@@ -121,21 +122,40 @@ if __name__ == "__main__":
 			'name': 'seating area 2'
 		}
 		seating_geometries.append(seating_area_2_geometry)
+		seating_area_3_geometry = {
+			'geometry': [[8-1.8-0.7, 8.8], [8-1.8, 8.8], [8-1.8, 8.8+4], [8-1.8-0.7, 8.8+4]],
+			'type': 'ZONE',
+			'name': 'seating area 3'
+		}
+		seating_geometries.append(seating_area_3_geometry)
+		seating_area_4_geometry = {
+			'geometry': [[8.2-2.4, 6.3], [8.2, 6.3], [8.2, 6.3+.5], [8.2-2.4, 6.3+.5]],
+			'type': 'ZONE',
+			'name': 'seating area 4'
+		}
+		seating_geometries.append(seating_area_4_geometry)
 		seating_polygon = unary_union([Polygon(geometry['geometry']) for geometry in seating_geometries])
 
 		# TB area
 		check_tb_area_cs = {
-			'geometry': [[8, 2.5], [9.65, 2.5], [9.65, 6.1], [8, 6.1]],
+			'geometry': [[8, .8], [9.6, .8], [9.6, 6.1], [8, 6.1]],
 			'type': 'ZONE',
-			'name': 'TB (staff)'
+			'name': 'TB staff'
 		}
 		check_tb_area_cs_polygon = Polygon(check_tb_area_cs['geometry'])
 		check_tb_area_pat = {
-			'geometry': [[9.651, 2.5], [11.17, 2.5], [11.17, 6.1], [9.651, 6.1]],
+			'geometry': [[9.8, 2.7], [11, 2.7], [11, 3.8], [9.8, 3.8]],
 			'type': 'ZONE',
-			'name': 'TB (patient)'
+			'name': 'Presumptive TB patient area'
 		}
 		check_tb_area_pat_polygon = Polygon(check_tb_area_pat['geometry'])
+		vitals_area_pat = [[9.8, 4.21], [11, 4.21], [11, 6.1], [9.8, 6.1]]
+		vitals_area_pat = {
+			'geometry': vitals_area_pat,
+			'type': 'ZONE',
+			'name': 'Vitals (patient)'
+		}
+		vitals_area_pat_polygon = Polygon(vitals_area_pat['geometry'])
 		
 		# Get list of CSV files
 		csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
@@ -155,5 +175,6 @@ if __name__ == "__main__":
 					[entry_polygon] * len(csv_files),
 					[seating_polygon] * len(csv_files),
 					[check_tb_area_cs_polygon] * len(csv_files),
-					[check_tb_area_pat_polygon] * len(csv_files)
+					[check_tb_area_pat_polygon] * len(csv_files),
+					[vitals_area_pat_polygon] * len(csv_files),
 				)
