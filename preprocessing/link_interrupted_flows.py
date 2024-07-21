@@ -12,14 +12,18 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 # processing parameters
 max_time_quick = np.arange(1, 11, 1).tolist()
-max_dist_quick = np.arange(0.1, 1.1, 0.1).tolist()
+max_time_quick = [x * 1000 for x in max_time_quick]
+max_dist_quick = np.repeat(1, 10).tolist()
 max_time_walk = [5, 5, 5, 5, 10, 10, 10, 10, 30, 30]
 max_time_walk = [x * 1000 for x in max_time_walk]
 max_dist_walk = [0.5, 1, 1.5, 2, 0.5, 1, 1.5, 2, 0.25, 0.5]
 max_time_sit = [60, 60, 60, 60, 300, 300, 300, 300, 600, 600]
 max_time_sit = [x * 1000 for x in max_time_sit]
 max_dist_sit = [0.25, 0.5, 0.75, 1, 0.25, 0.5, 0.75, 1.0, 0.25, 0.5]
-params = [max_time_walk, max_dist_walk, max_time_sit, max_dist_sit, max_time_quick, max_dist_quick]
+max_time_tba = [10, 10, 10, 30, 30, 30, 30, 60, 60, 60]
+max_time_tba = [x * 1000 for x in max_time_tba]
+max_dist_tba = [0.2, 0.4, 0.6, 0.2, 0.4, 0.6, 0.8, 0.2, 0.4, 0.6]
+params = [max_time_walk, max_dist_walk, max_time_sit, max_dist_sit, max_time_quick, max_dist_quick, max_time_tba, max_dist_tba]
 all_same_length = all(len(sublist) == len(params[0]) for sublist in params)
 if not all_same_length:
 	raise ValueError("Parameter lists must be of the same length.")
@@ -86,7 +90,7 @@ def filter_potential_matches(potential_matches: pd.DataFrame, last_point: pd.Ser
 	return potential_matches
 
 # link interrupted tracks
-def link_interrupted_tracks(df: pd.DataFrame, track_id: int, max_time_walk: int, max_dist_walk: float, max_time_sit: int, max_dist_sit: float, max_time_quick: int, max_dist_quick: float) -> pd.DataFrame:
+def link_interrupted_tracks(df: pd.DataFrame, track_id: int, max_time_walk: int, max_dist_walk: float, max_time_sit: int, max_dist_sit: float, max_time_quick: int, max_dist_quick: float, max_time_tba: int, max_dist_tba: float) -> pd.DataFrame:
 	"""
 	Iteratively links interrupted tracks based on time and distance criteria, ensuring all linked tracks
 	receive the earliest track_id among them. The process is repeated until no more links can be made.
@@ -99,6 +103,8 @@ def link_interrupted_tracks(df: pd.DataFrame, track_id: int, max_time_walk: int,
 	- max_dist_sit: Maximum distance to look ahead for linking tracks if the last point is within the seating area.
 	- max_time_quick: Maximum time to look ahead for linking tracks if the last point is in the seating area but walking.
 	- max_dist_quick: Maximum distance to look ahead for linking tracks if the last point is in the seating area but walking.
+	- max_time_tba: Maximum time to look ahead for linking tracks if the last point is in the TB area.
+	- max_dist_tba: Maximum distance to look ahead for linking tracks if the last point is in the TB area.
 	
 	Returns:
 	- DataFrame with updated 'track_id' for linked tracks.
@@ -110,11 +116,11 @@ def link_interrupted_tracks(df: pd.DataFrame, track_id: int, max_time_walk: int,
 	
 	# check if near entry
 	if last_point['near_entry']:
-		return False, False, df
+		return False, 0, df
 	
 	# check if in TB area for clinic staff
 	if first_point['in_tb_cs']:
-		return False, False, df
+		return False, 0, df
 	
 	# Filter based on time condition and then select the first occurrence of each potential track_id
 	potential_matches = df.drop_duplicates(subset='track_id', keep='first')
@@ -122,26 +128,35 @@ def link_interrupted_tracks(df: pd.DataFrame, track_id: int, max_time_walk: int,
 	potential_matches = potential_matches[potential_matches['near_entry'] == False]
 	potential_matches = potential_matches[potential_matches['in_tb_cs'] == False]
 	if potential_matches.empty:
-		return False, False, df
+		return False, 0, df
 	
 	# filter potential matches based on time, distance, and walking direction
 	if last_point['in_seating']:
 		potential_matches_sit = potential_matches[potential_matches['in_seating'] == True]
-		potential_matches_sit = filter_potential_matches(potential_matches, last_point, max_time_sit, max_dist_sit)
+		potential_matches_sit = filter_potential_matches(potential_matches_sit, last_point, max_time_sit, max_dist_sit)
 		if potential_matches_sit.empty:
-			seat_link = False
+			link_type = 1
 			potential_matches = filter_potential_matches(potential_matches, last_point, max_time_quick, max_dist_quick)
 		else:
-			seat_link = True
+			link_type = 3
 			potential_matches = potential_matches_sit
+	elif last_point['in_tb_pat'] or last_point['in_vitals_pat']:
+		potential_matches_tba = potential_matches[potential_matches['in_tb_pat'] | potential_matches['in_vitals_pat']]
+		potential_matches_tba = filter_potential_matches(potential_matches_tba, last_point, max_time_tba, max_dist_tba)
+		if potential_matches_tba.empty:
+			link_type = 1
+			potential_matches = filter_potential_matches(potential_matches, last_point, max_time_quick, max_dist_quick)
+		else:
+			link_type = 4
+			potential_matches = potential_matches_tba
 	else:
-		seat_link = False
+		link_type = 2
 		potential_matches = filter_potential_matches(potential_matches, last_point, max_time_walk, max_dist_walk)
 		# second_last_point = current_track.iloc[-2]
 		# potential_matches = potential_matches[potential_matches.apply(lambda row: is_direction_continued(second_last_point, last_point, row), axis=1)]
 	
 	if potential_matches.empty:
-		return False, False, df
+		return False, link_type, df
 	else:
 		# Sort by time_diff and distance, then take the first match
 		best_match = potential_matches.sort_values(by=['time_diff', 'distance']).iloc[0]
@@ -149,17 +164,17 @@ def link_interrupted_tracks(df: pd.DataFrame, track_id: int, max_time_walk: int,
 		
 		# Update new_track_id_mapping to reflect the link
 		df['track_id'] = df['track_id'].replace(track_id, best_match_track_id)
-		return True, seat_link, df
+		return True, link_type, df
 
 def process_tracks(initial_dataset: pd.DataFrame, parameters: list) -> pd.DataFrame:
 	"""
 	Processes tracks with varying lookahead values using the first values from seconds_array and distance_array
 	for the initial call, and then uses the subsequent values in the loop.
-
+	
 	Parameters:
 	- initial_dataset (pd.DataFrame): The initial dataset to process.
 	- parameters (list): An array of lists of the same length containing the parameters for linking tracks.
-
+	
 	Returns:
 	- pd.DataFrame: The final updated dataset.
 	"""
@@ -169,7 +184,9 @@ def process_tracks(initial_dataset: pd.DataFrame, parameters: list) -> pd.DataFr
 	
 	for i in range(len(parameters[0])):
 		link_walk_count = 0  # Initialize a counter for the number of links made in walking area
+		link_quick_count = 0 # Initialize a counter for the number of links made in quick area
 		link_sit_count = 0  # Initialize a counter for the number of links made in seating area
+		link_tba_count = 0 # Initialize a counter for the number of links made in TB area
 		more_links = True
 		while more_links:
 			# Copy the current state of updated_dataset to check for changes after processing
@@ -180,24 +197,28 @@ def process_tracks(initial_dataset: pd.DataFrame, parameters: list) -> pd.DataFr
 			
 			for track_id in track_ids:
 				# Attempt to link interrupted tracks
-				updated, is_seat_link, updated_dataset = link_interrupted_tracks(updated_dataset, track_id, parameters[0][i], parameters[1][i], parameters[2][i], parameters[3][i], parameters[4][i], parameters[5][i])
+				updated, link_type, updated_dataset = link_interrupted_tracks(updated_dataset, track_id, parameters[0][i], parameters[1][i], parameters[2][i], parameters[3][i], parameters[4][i], parameters[5][i], parameters[6][i], parameters[7][i])
 				# Check if the operation resulted in a change
 				if updated:
-					if is_seat_link:
-						link_sit_count += 1
-					else:
+					if link_type == 1:
+						link_quick_count += 1
+					elif link_type == 2:
 						link_walk_count += 1
+					elif link_type == 3:
+						link_sit_count += 1
+					elif link_type == 4:
+						link_tba_count += 1
 			
 			# Check if at least one track_id has been replaced by comparing the datasets before and after processing
 			more_links = not previous_dataset.equals(updated_dataset)
 		
 		# Print the total number of links made
-		print(f"Total number of links made after round {i+1}: {link_walk_count} (walk) and {link_sit_count} (sit)")
+		print(f"Total number of links made after round {i+1}: {link_quick_count} (quick), {link_walk_count} (walk), {link_sit_count} (sit), {link_tba_count} (tba)")
 	
 	return updated_dataset
 
 # testing
-test_unlinked = pd.read_csv("data-clean/tracking/unlinked/2024-06-20.csv")
-test_linked = process_tracks(test_unlinked, params)
-test_linked = test_linked[['time', "raw_track_id", 'track_id', 'position_x', 'position_y', 'near_entry', 'in_tb_pat', 'in_tb_cs', 'in_seating']]
-test_linked.to_csv("data-clean/tracking/linked/2024-06-20.csv", index=False)
+test_old = pd.read_csv("data-clean/tracking/unlinked/2024-06-20.csv")
+test_new = process_tracks(test_old, params)
+unique_mappings = test_new[['raw_track_id', 'track_id']].drop_duplicates()
+unique_mappings.to_csv("data-clean/tracking/linked/2024-06-20.csv", index=False)
