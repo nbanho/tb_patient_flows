@@ -1,32 +1,10 @@
 import os
 import pandas as pd
-import json
-from datetime import datetime as dt
-import matplotlib.pyplot as plt
 import numpy as np
-from shapely.geometry import Point, Polygon
-from shapely.ops import unary_union
+from concurrent.futures import ProcessPoolExecutor
 
 # Ignore the SettingWithCopyWarning in pandas
 pd.options.mode.chained_assignment = None  # default='warn'
-
-# processing parameters
-max_time_quick = np.arange(1, 11, 1).tolist()
-max_time_quick = [x * 1000 for x in max_time_quick]
-max_dist_quick = np.repeat(1, 10).tolist()
-max_time_walk = [5, 5, 5, 5, 10, 10, 10, 10, 30, 30]
-max_time_walk = [x * 1000 for x in max_time_walk]
-max_dist_walk = [0.5, 1, 1.5, 2, 0.5, 1, 1.5, 2, 0.25, 0.5]
-max_time_sit = [60, 60, 60, 60, 300, 300, 300, 300, 600, 600]
-max_time_sit = [x * 1000 for x in max_time_sit]
-max_dist_sit = [0.25, 0.5, 0.75, 1, 0.25, 0.5, 0.75, 1.0, 0.25, 0.5]
-max_time_tba = [10, 10, 10, 30, 30, 30, 30, 60, 60, 60]
-max_time_tba = [x * 1000 for x in max_time_tba]
-max_dist_tba = [0.2, 0.4, 0.6, 0.2, 0.4, 0.6, 0.8, 0.2, 0.4, 0.6]
-params = [max_time_walk, max_dist_walk, max_time_sit, max_dist_sit, max_time_quick, max_dist_quick, max_time_tba, max_dist_tba]
-all_same_length = all(len(sublist) == len(params[0]) for sublist in params)
-if not all_same_length:
-	raise ValueError("Parameter lists must be of the same length.")
 
 # check if direction is continued
 def is_direction_continued(second_last_point: pd.Series, last_point: pd.Series, potential_match_point: pd.Series) -> bool:
@@ -141,7 +119,10 @@ def link_interrupted_tracks(df: pd.DataFrame, track_id: int, max_time_walk: int,
 			link_type = 3
 			potential_matches = potential_matches_sit
 	elif last_point['in_tb_pat'] or last_point['in_vitals_pat']:
-		potential_matches_tba = potential_matches[potential_matches['in_tb_pat'] | potential_matches['in_vitals_pat']]
+		if last_point['in_tb_pat']:
+			potential_matches_tba = potential_matches[potential_matches['in_tb_pat']]
+		else:
+			potential_matches_tba = potential_matches[potential_matches['in_vitals_pat']]
 		potential_matches_tba = filter_potential_matches(potential_matches_tba, last_point, max_time_tba, max_dist_tba)
 		if potential_matches_tba.empty:
 			link_type = 1
@@ -213,12 +194,53 @@ def process_tracks(initial_dataset: pd.DataFrame, parameters: list) -> pd.DataFr
 			more_links = not previous_dataset.equals(updated_dataset)
 		
 		# Print the total number of links made
-		print(f"Total number of links made after round {i+1}: {link_quick_count} (quick), {link_walk_count} (walk), {link_sit_count} (sit), {link_tba_count} (tba)")
+		print(f"... total number of links made after round {i+1}: {link_quick_count} (quick), {link_walk_count} (walk), {link_sit_count} (sit), {link_tba_count} (tba)")
 	
 	return updated_dataset
 
 # testing
-test_old = pd.read_csv("data-clean/tracking/unlinked/2024-06-20.csv")
-test_new = process_tracks(test_old, params)
-unique_mappings = test_new[['raw_track_id', 'track_id']].drop_duplicates()
-unique_mappings.to_csv("data-clean/tracking/linked/2024-06-20.csv", index=False)
+# test_old = pd.read_csv("data-clean/tracking/unlinked/2024-06-26.csv")
+# test_new = process_tracks(test_old, params)
+# unique_mappings = test_new[['raw_track_id', 'track_id']].drop_duplicates()
+# unique_mappings.to_csv("data-clean/tracking/linked/2024-06-26.csv", index=False)
+
+def read_and_process_tracks(file: str, pars = list):
+	print(f"Processing file: {file}")
+	uldf = pd.read_csv(os.path.join('../data-clean/tracking/unlinked/', file))
+	ldf = process_tracks(uldf, pars)
+	mappings = ldf[['raw_track_id', 'track_id']].drop_duplicates()
+	mappings.to_csv(os.path.join('../data-clean/tracking/linked/', file), index=False)
+	print(f"Saving file: {file}")
+
+
+if __name__ == "__main__":
+		# files
+		unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv')]
+		
+		# processing parameters
+		max_time_quick = np.arange(1, 11, 1).tolist()
+		max_time_quick = [x * 1000 for x in max_time_quick]
+		max_dist_quick = np.repeat(1, 10).tolist()
+		max_time_walk = [5, 5, 5, 5, 10, 10, 10, 10, 30, 30]
+		max_time_walk = [x * 1000 for x in max_time_walk]
+		max_dist_walk = [0.5, 1, 1.5, 2, 0.5, 1, 1.5, 2, 0.25, 0.5]
+		max_time_sit = [60, 60, 60, 60, 300, 300, 300, 300, 600, 600]
+		max_time_sit = [x * 1000 for x in max_time_sit]
+		max_dist_sit = [0.25, 0.5, 0.75, 1, 0.25, 0.5, 0.75, 1.0, 0.25, 0.5]
+		max_time_tba = [30, 30, 30, 30, 60, 60, 60, 60, 120, 120]
+		max_time_tba = [x * 1000 for x in max_time_tba]
+		max_dist_tba = [0.25, 0.5, 0.75, 1, 0.25, 0.5, 0.75, 1.0, 0.25, 0.5]
+		params = [max_time_walk, max_dist_walk, max_time_sit, max_dist_sit, max_time_quick, max_dist_quick, max_time_tba, max_dist_tba]
+		all_same_length = all(len(sublist) == len(params[0]) for sublist in params)
+		if not all_same_length:
+			raise ValueError("Parameter lists must be of the same length.")
+		
+		# settings
+		num_cores = 3
+		
+		with ProcessPoolExecutor(max_workers=num_cores) as executor:
+				executor.map(
+					read_and_process_tracks,
+					unlinked_files,
+					[params] * len(unlinked_files)
+				)

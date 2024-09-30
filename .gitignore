@@ -4,6 +4,7 @@ data-clean/*
 doc/*
 test-data/*
 *.DS_Store
+*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
