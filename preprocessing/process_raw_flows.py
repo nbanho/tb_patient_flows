@@ -83,6 +83,7 @@ def process_file(filename, in_fold_path, out_fold_path, time_filter, distance_fi
 		df = annotate_xy(df, vit_pat_polygon, 'in_vitals_pat')
 		df.to_csv(os.path.join(out_fold_path, filename), index=False)
 
+
 if __name__ == "__main__":
 		folder_path = '../data-clean/tracking/unlinked/'
 		output_folder_path = '../data-clean/tracking/unlinked/'
@@ -178,3 +179,4 @@ if __name__ == "__main__":
 					[check_tb_area_pat_polygon] * len(csv_files),
 					[vitals_area_pat_polygon] * len(csv_files),
 				)
+

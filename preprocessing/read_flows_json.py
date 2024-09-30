@@ -1,6 +1,9 @@
 import os
 import json
 import pandas as pd
+import re
+from collections import defaultdict
+from datetime import datetime
 
 def event_json_to_dataframe(file_path):
 	"""
@@ -94,30 +97,56 @@ def filter_daytime(df: pd.DataFrame, start_hour: int, end_hour: int) -> pd.DataF
 	
 	return filtered_df
 
-def process_event_files_in_folder(folder_path, output_csv_path):
+def process_event_files_in_folder(folder_path, files, output_csv_path, date):
 	# Initialize an empty list to hold the dataframes
 	df_list = []
 	# Loop through each file in the folder
-	for filename in os.listdir(folder_path):
+	for f in files:
 		# Check if the file is a JSON file
-		if filename.endswith('.json'):
+		if f.endswith('.json'):
 			# Construct the full file path
-			file_path = os.path.join(folder_path, filename)
+			file_path = os.path.join(folder_path, f)
 			# Convert the JSON file to a dataframe and append it to the list
-			df = event_json_to_dataframe(file_path)
-			df_list.append(df)
+			try:
+				df = event_json_to_dataframe(file_path)
+				df_list.append(df)
+			except Exception as e:
+				print(f"Error processing file {f}: {e}")
+				continue
 	# Concatenate all dataframes into a single dataframe
 	combined_df = pd.concat(df_list, ignore_index=True)
-	# Separate the combined dataframe into a list of dataframes by day
-	daily_dfs = separate_by_day(combined_df)
-	# Filter each daily dataframe to include only daytime data
-	filtered_dfs = [filter_daytime(df, 6, 18) for df in daily_dfs]
-	# Save each data frame to a separate CSV file
-	for df in filtered_dfs:
-		if df.empty:
-			continue
-		# Get the date from the first row of the dataframe
-		date = pd.to_datetime(df['time'].iloc[0], unit='ms').strftime('%Y-%m-%d')
-		df.to_csv(f"{output_csv_path}{date}.csv", index=False)
+	# Filter daily dataframe to include only daytime data
+	filtered_df = filter_daytime(combined_df, 6, 18)
+	# Save data frame to a separate CSV file
+	filtered_df.to_csv(f"{output_csv_path}{date}.csv", index=False)
 
-process_event_files_in_folder("data-raw/xovis/june-25/Event/", "data-clean/tracking/unlinked/")
+# Define the folder path
+folder_path = "data-raw/xovis.nosynch/final-data/EVENT/"
+
+# Get all file names in the specified folder
+file_names = os.listdir(folder_path)
+
+# Regular expression to extract date in the format %Y-%m-%d
+date_pattern = re.compile(r'\d{4}-\d{2}-\d{2}')
+
+# Dictionary to store grouped file names by date
+grouped_files = defaultdict(list)
+
+for file_name in file_names:
+    # Extract date from file name
+    match = date_pattern.search(file_name)
+    if match:
+        date = match.group(0)
+        grouped_files[date].append(file_name)
+
+# Convert defaultdict to a regular dictionary and print the result
+grouped_files = dict(grouped_files)
+cutoff_date = datetime.strptime('2024-06-16', '%Y-%m-%d')
+grouped_files = {date: files for date, files in grouped_files.items() if datetime.strptime(date, '%Y-%m-%d') > cutoff_date}
+grouped_files = dict(sorted(grouped_files.items(), key=lambda item: datetime.strptime(item[0], '%Y-%m-%d')))
+
+# process files by date
+for date in list(grouped_files.keys()):
+		print(f"Processing files for date: {date}")
+		process_event_files_in_folder(folder_path, grouped_files[date], "data-clean/tracking/unlinked/", date)
+
