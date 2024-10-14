@@ -215,7 +215,7 @@ def read_and_process_tracks(file: str, pars = list):
 
 if __name__ == "__main__":
 		# files
-		unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv')]
+		unlinked_files = ["2024-06-20.csv"] # unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv')]
 		
 		# processing parameters
 		max_time_quick = np.arange(1, 11, 1).tolist()
@@ -227,16 +227,16 @@ if __name__ == "__main__":
 		max_time_sit = [60, 60, 60, 60, 300, 300, 300, 300, 600, 600]
 		max_time_sit = [x * 1000 for x in max_time_sit]
 		max_dist_sit = [0.25, 0.5, 0.75, 1, 0.25, 0.5, 0.75, 1.0, 0.25, 0.5]
-		max_time_tba = [30, 30, 30, 30, 60, 60, 60, 60, 120, 120]
+		max_time_tba = [5, 5, 5, 5, 10, 10, 10, 10, 20, 20]
 		max_time_tba = [x * 1000 for x in max_time_tba]
-		max_dist_tba = [0.25, 0.5, 0.75, 1, 0.25, 0.5, 0.75, 1.0, 0.25, 0.5]
+		max_dist_tba = [0.2, 0.4, 0.6, 0.8, 0.2, 0.4, 0.6, 0.8, 0.2, 0.4]
 		params = [max_time_walk, max_dist_walk, max_time_sit, max_dist_sit, max_time_quick, max_dist_quick, max_time_tba, max_dist_tba]
 		all_same_length = all(len(sublist) == len(params[0]) for sublist in params)
 		if not all_same_length:
 			raise ValueError("Parameter lists must be of the same length.")
 		
 		# settings
-		num_cores = 3
+		num_cores = 1
 		
 		with ProcessPoolExecutor(max_workers=num_cores) as executor:
 				executor.map(

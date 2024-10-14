@@ -112,7 +112,7 @@ if __name__ == "__main__":
 		# Seating area
 		seating_geometries = []
 		seating_area_1_geometry = {
-			'geometry': [[11.25, 2.5], [47.5, 2.5], [47.5, 6.5], [11.25, 6.5]],
+			'geometry': [[11.31, 2.5], [47.5, 2.5], [47.5, 6.5], [11.31, 6.5]],
 			'type': 'ZONE',
 			'name': 'seating area 1'
 		}
@@ -139,18 +139,18 @@ if __name__ == "__main__":
 
 		# TB area
 		check_tb_area_cs = {
-			'geometry': [[8, .8], [9.6, .8], [9.6, 6.1], [8, 6.1]],
+			'geometry': [[8, .8], [9.09, .8], [9.09, 5.75], [8, 5.75]],
 			'type': 'ZONE',
 			'name': 'TB staff'
 		}
 		check_tb_area_cs_polygon = Polygon(check_tb_area_cs['geometry'])
 		check_tb_area_pat = {
-			'geometry': [[9.8, 2.7], [11, 2.7], [11, 3.8], [9.8, 3.8]],
+			'geometry': [[9.1, 2.7], [11.3, 2.7], [11.3, 3.7], [9.1, 3.7]],
 			'type': 'ZONE',
 			'name': 'Presumptive TB patient area'
 		}
 		check_tb_area_pat_polygon = Polygon(check_tb_area_pat['geometry'])
-		vitals_area_pat = [[9.8, 4.21], [11, 4.21], [11, 6.1], [9.8, 6.1]]
+		vitals_area_pat = [[9.1, 3.71], [11.3, 3.71], [11.3, 6.25], [9.1, 6.25]]
 		vitals_area_pat = {
 			'geometry': vitals_area_pat,
 			'type': 'ZONE',
@@ -159,7 +159,7 @@ if __name__ == "__main__":
 		vitals_area_pat_polygon = Polygon(vitals_area_pat['geometry'])
 		
 		# Get list of CSV files
-		csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
+		csv_files = ["2024-06-20.csv"] # [f for f in os.listdir(folder_path) if f.endswith('.csv')]
 		
 		# Specify the number of cores to use
 		num_cores = 3
