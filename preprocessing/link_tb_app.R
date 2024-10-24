@@ -21,8 +21,8 @@ time_choices <- c(10, 30, 60, 120, 300, 600, 900)
 dist_choices <- seq(0, 3, .5)
 default_time <- 300
 default_dist <- 1.5
-alt_time <- 60
-alt_dist <- 1
+min_alt_time <- 60
+min_alt_dist <- 1
 
 
 #### Building ####
@@ -58,6 +58,15 @@ clinic <- read.csv("../data-clean/clinical/tb_cases.csv")
 
 #### Functions ####
 
+standing_height <- function(x, k = 20) {
+  n <- length(x)
+  if (n < k) {
+    return(max(x))
+  } else {
+    return(max(zoo::rollmean(x, k)))
+  }
+}
+
 euclidean <- function(x1, x2, y1, y2) {
   sqrt((x1 - x2)^2 + (y1 - y2)^2)
 }
@@ -70,7 +79,7 @@ read_tracking <- function(file) {
       "track_id",
       "time",
       "position_x", "position_y", "person_height",
-      "near_entry", "in_tb_pat", "in_vitals_pat"
+      "near_entry", "in_check", "in_check_tb", "in_sputum"
     ),
     integer64 = "numeric"
   ) %>%
@@ -81,55 +90,59 @@ read_tracking <- function(file) {
     )
 
   # add mappings after preprocessing
-  date <- as.Date(as.POSIXct(tracks$time[1] / 1000, origin = "1970-01-01"))
-  mappings_csv <- paste0("../data-clean/tracking/linked/", date, ".csv")
+  file_date <- as.Date(
+    as.POSIXct(tracks$time[1] / 1000, origin = "1970-01-01")
+  )
+  mappings_csv <- paste0("../data-clean/tracking/linked/", file_date, ".csv")
   mappings <- read.csv(mappings_csv) %>%
     rename(
       new_track_id = track_id,
       track_id = raw_track_id
     )
-  tracks <- left_join(tracks, mappings, by = "track_id")
 
   # existing links
-  links_csv <- paste0("../data-clean/tracking/linked-tb/", date, ".csv")
+  links_csv <- paste0("../data-clean/tracking/linked-tb/", file_date, ".csv")
   if (file.exists(links_csv)) {
     links <- read.csv(links_csv)
+    tracks <- left_join(
+      tracks,
+      links,
+      by = "track_id"
+    )
   } else {
+    tracks <- left_join(tracks, mappings, by = "track_id")
+    clin_sub <- subset(clinic, date == file_date)
+    last_clin_time <- max(as.POSIXct(clin_sub$start_time))
     links <- tracks %>%
       group_by(new_track_id) %>%
       summarise(
-        sum_tb = sum(c(NA, diff(time))[in_tb_pat], na.rm = TRUE) / 1000,
-        sum_vit = sum(c(NA, diff(time))[in_vitals_pat], na.rm = TRUE) / 1000,
-        entered = near_entry[1],
-        exited = near_entry[n()],
-        en_dist = euclidean(x[1], 10.4, y[1], 3.25),
-        ex_dist = euclidean(x[n()], 10.4, y[n()], 3.25)
+        start_time = as.POSIXct(min(time) / 1000, origin = "1970-01-01"),
+        time_tb = sum(c(NA, diff(time))[in_check_tb], na.rm = TRUE) / 1000,
+        sputum = any(in_sputum),
+        missing_start = in_check_tb[1],
+        missing_end = in_check_tb[n()]
       ) %>%
       ungroup() %>%
       mutate(
-        tb = case_when(
-          (sum_tb > 180) & (sum_vit > 30) ~ TRUE,
-          entered & exited & (sum_tb > 60) & (sum_vit > 30) ~ TRUE,
-          !entered & exited & (sum_tb > 10) & (en_dist < 3) ~ TRUE,
-          entered & !exited & (sum_tb > 10) & (ex_dist < 3) ~ TRUE,
-          .default = FALSE
+        category = case_when(
+          sputum ~ "sure",
+          !sputum & between(time_tb, 60, 300) ~ "possible",
+          !sputum & between(time_tb, 30, 59) ~ "maybe",
+          !sputum & between(time_tb, 61, 1200) ~ "maybe",
+          !sputum & !between(time_tb, 60, 300) & missing_start ~ "maybe",
+          !sputum & !between(time_tb, 60, 300) & missing_end ~ "maybe",
+          .default = "not TB"
         ),
-        sure_tb = case_when(
-          (sum_tb > 180) & (sum_vit > 30) ~ TRUE,
-          .default = FALSE
-        ),
-        seen = FALSE
+        category = ifelse(start_time > last_clin_time, "not TB", category)
       ) %>%
       left_join(mappings, by = "new_track_id") %>%
-      dplyr::select(track_id, new_track_id, tb, sure_tb, seen)
+      dplyr::select(track_id, new_track_id, category)
+    tracks <- left_join(
+      tracks,
+      links %>% dplyr::select(-new_track_id),
+      by = "track_id"
+    )
   }
-
-  # merge
-  tracks <- left_join(
-    tracks,
-    links %>% dplyr::select(-new_track_id),
-    by = "track_id"
-  )
 
   return(tracks)
 }
@@ -142,78 +155,205 @@ duration_min_sec <- function(time, subset = NULL) {
   total <- sum(dt[subset], na.rm = TRUE) / 1000
   minutes <- floor(total / 60)
   seconds <- round(total - minutes * 60)
-  paste0(minutes, "min ", seconds, "sec")
+  paste0(minutes, "m ", seconds, "s")
 }
 
-update_datetime <- function(df, id) {
+update_datetime <- function(values) {
   as.character(as.POSIXct(
-    df$time[df$new_track_id == id][1] / 1000,
+    values$dat_i$time[1] / 1000,
     origin = "1970-01-01"
   ))
 }
 
 update_ids <- function(values) {
-  values$ids <- as.integer(
-    values$dat$new_track_id[values$dat$tb]
-  )
   values$ids_pu <- as.integer(unique(
-    values$dat$new_track_id[
-      values$dat$tb &
-        !values$dat$seen &
-        !values$dat$sure_tb
-    ]
+    values$dat$new_track_id[values$dat$category == "maybe"]
   ))
   values$ids_pc <- as.integer(unique(
-    values$dat$new_track_id[
-      values$dat$tb &
-        values$dat$seen &
-        !values$dat$sure_tb
-    ]
+    values$dat$new_track_id[values$dat$category == "possible"]
   ))
   values$ids_du <- as.integer(unique(
-    values$dat$new_track_id[
-      values$dat$tb &
-        !values$dat$seen &
-        values$dat$sure_tb
-    ]
+    values$dat$new_track_id[values$dat$category == "likely"]
   ))
   values$ids_dc <- as.integer(unique(
-    values$dat$new_track_id[
-      values$dat$tb &
-        values$dat$seen &
-        values$dat$sure_tb
-    ]
+    values$dat$new_track_id[values$dat$category == "sure"]
   ))
 }
 
-display_id_counts <- function(df) {
-  if (is.null(df)) {
+get_next_id <- function(x, id) {
+  n <- length(x)
+  next_id <- which(x == id) + 1
+  if (next_id > n) {
+    return(x[1])
+  } else {
+    return(x[next_id])
+  }
+}
+
+get_prev_id <- function(x, id) {
+  n <- length(x)
+  prev_id <- which(x == id) - 1
+  if (prev_id <= 0) {
+    return(x[n])
+  } else {
+    return(x[prev_id])
+  }
+}
+
+update_id_selection <- function(session, values) {
+  cat <- values$dat$category[values$dat$new_track_id == values$select_id][1]
+  if (cat == "maybe") {
+    show <- 1
+  } else if (cat == "possible") {
+    show <- 2
+  } else if (cat == "likely") {
+    show <- 3
+  } else {
+    show <- 4
+  }
+  if (show == 1) {
+    values$prev_id <- get_prev_id(values$ids_pu, values$select_id)
+    values$next_id <- get_next_id(values$ids_pu, values$select_id)
+    updateSelectizeInput(
+      session, "id",
+      choices = values$ids_pu,
+      selected = values$select_id,
+      server = TRUE
+    )
+  } else if (show == 2) {
+    values$prev_id <- get_prev_id(values$ids_pc, values$select_id)
+    values$next_id <- get_next_id(values$ids_pc, values$select_id)
+    updateSelectizeInput(
+      session, "id",
+      choices = values$ids_pc,
+      selected = values$select_id,
+      server = TRUE
+    )
+  } else if (show == 3) {
+    values$prev_id <- get_prev_id(values$ids_du, values$select_id)
+    values$next_id <- get_next_id(values$ids_du, values$select_id)
+    updateSelectizeInput(
+      session, "id",
+      choices = values$ids_du,
+      selected = values$select_id,
+      server = TRUE
+    )
+  } else {
+    values$prev_id <- get_prev_id(values$ids_dc, values$select_id)
+    values$next_id <- get_next_id(values$ids_dc, values$select_id)
+    updateSelectizeInput(
+      session, "id",
+      choices = values$ids_dc,
+      selected = values$select_id,
+      server = TRUE
+    )
+  }
+}
+
+update_info <- function(values) {
+  if (is.na(values$dat_i$category[1])) {
+    return("-")
+  }
+  cat <- values$dat_i$category[1]
+  if (cat == "maybe") {
+    show <- 1
+  } else if (cat == "possible") {
+    show <- 2
+  } else if (cat == "likely") {
+    show <- 3
+  } else {
+    show <- 4
+  }
+  if (cat == "maybe") {
+    n <- length(values$ids_pu)
+    i <- which(values$ids_pu == values$dat_i$new_track_id[1])
+  } else if (cat == "possible") {
+    n <- length(values$ids_pc)
+    i <- which(values$ids_pc == values$dat_i$new_track_id[1])
+  } else if (cat == "likely") {
+    n <- length(values$ids_du)
+    i <- which(values$ids_du == values$dat_i$new_track_id[1])
+  } else {
+    n <- length(values$ids_dc)
+    i <- which(values$ids_dc == values$dat_i$new_track_id[1])
+  }
+  links <- n_distinct(values$dat_i$track_id) - 1
+  info <- paste0(
+    i, " of ", n, " [", cat, "] ",
+    "with ", links, " [links]"
+  )
+  return(info)
+}
+
+update_time <- function(values) {
+  time_1 <- duration_min_sec(values$dat_i$time)
+  time_2 <- duration_min_sec(values$dat_i$time, values$dat_i$in_check_tb)
+  time_3 <- duration_min_sec(values$dat_i$time, values$dat_i$in_check)
+  time_info <- paste0(
+    time_1, " [Total], ",
+    time_2, " [TB], ",
+    time_3, " [Check]"
+  )
+  return(time_info)
+}
+
+update_height <- function(values, direction) {
+  if (is.na(values$dat_i$height[1])) {
+    return("-")
+  }
+  mean_height <- round(median(values$dat_i$height), 2)
+  max_height <- round(standing_height(values$dat_i$height), 2)
+  if (direction == 1) {
+    last_height <- round(tail(values$dat_i$height, 1), 2)
+  } else {
+    last_height <- round(values$dat_i$height[1], 2)
+  }
+  height_info <- paste0(
+    last_height, " [Last], ",
+    mean_height, " [Sit], ",
+    max_height, " [Stand]"
+  )
+  return(height_info)
+}
+
+update_counts <- function(values) {
+  if (is.null(values$dat)) {
     return("")
   } else {
-    n_pu <- n_distinct(df$new_track_id[df$tb & !df$seen & !df$sure_tb])
-    n_pc <- n_distinct(df$new_track_id[df$tb & df$seen & !df$sure_tb])
-    n_p <- n_pu + n_pc
-    n_du <- n_distinct(df$new_track_id[df$tb & !df$seen & df$sure_tb])
-    n_dc <- n_distinct(df$new_track_id[df$tb & df$seen & df$sure_tb])
-    n_d <- n_du + n_dc
+    n_pu <- length(values$ids_pu)
+    n_pc <- length(values$ids_pc)
+    n_du <- length(values$ids_du)
+    n_dc <- length(values$ids_dc)
     counts <- paste0(
-      "Maybe: ", n_p, " (", n_pc, " checked), ",
-      "Sure: ", n_d, " (", n_dc, " checked)"
+      "Ma: ", n_pu, ", Po: ", n_pc,
+      ", Li: ", n_du, " Su: ", n_dc
     )
     return(counts)
   }
 }
 
-update_linkage <- function(df, file_path) {
+update_linkage <- function(values) {
   write.csv(
-    x = df %>%
+    x = values$dat %>%
       group_by(track_id, new_track_id) %>%
       slice(1) %>%
       ungroup() %>%
-      dplyr::select(track_id, new_track_id, tb, sure_tb, seen),
-    file = file_path,
+      dplyr::select(track_id, new_track_id, category),
+    file = values$save_file,
     row.names = FALSE
   )
+}
+
+update_seen <- function(values, id, is_seen) {
+  values$dat$seen[values$dat$new_track_id == id] <- is_seen
+}
+
+update_tb <- function(values, id, is_tb) {
+  values$dat$tb[values$dat$new_track_id == id] <- is_tb
+}
+
+update_sure_tb <- function(values, id, is_sure_tb) {
+  values$dat$sure_tb[values$dat$new_track_id == id] <- is_sure_tb
 }
 
 filter_tracks <- function(df, id, direction = 1) {
@@ -393,22 +533,30 @@ table_ids <- function(df_i, df_pos, direction) {
   }
 
   # last values from ID
+  df_i_height <- df_i %>%
+    group_by(new_track_id) %>%
+    summarise(
+      mean_height = median(height),
+      max_height = standing_height(height)
+    ) %>%
+    ungroup()
   if (direction == 1) {
     df_i <- df_i %>%
-      mutate(mean_height = mean(height)) %>%
       tail(1)
   } else {
     df_i <- df_i %>%
-      mutate(mean_height = mean(height)) %>%
       head(1)
   }
+  df_i <- left_join(df_i, df_i_height, by = "new_track_id")
+
 
   # first values from possible links
   df_pos_1 <- df_pos %>%
     group_by(new_track_id) %>%
     summarize(
       dur = duration_min_sec(time),
-      mean_height = mean(height)
+      mean_height = median(height),
+      max_height = standing_height(height)
     ) %>%
     ungroup()
   if (direction == 1) {
@@ -433,55 +581,48 @@ table_ids <- function(df_i, df_pos, direction) {
     df_feat <- df_feat %>%
       mutate(
         timediff = (time_pos - time_i) / 1000,
-        distance = euclidean(x_pos, x_i, y_pos, y_i),
-        last_heightdiff = height_pos - height_i,
-        mean_heightdiff = mean_height_pos - mean_height_i
+        distance = euclidean(x_pos, x_i, y_pos, y_i)
       )
   } else {
     df_feat <- df_feat %>%
       mutate(
         timediff = (time_i - time_pos) / 1000,
-        distance = euclidean(x_pos, x_i, y_pos, y_i),
-        last_heightdiff = height_i - height_pos,
-        mean_heightdiff = mean_height_i - mean_height_pos
+        distance = euclidean(x_pos, x_i, y_pos, y_i)
       )
   }
 
   df_feat <- df_feat %>%
     mutate(
+      last_heightdiff = height_pos - height_i,
+      mean_heightdiff = mean_height_pos - mean_height_i,
+      max_heightdiff = max_height_pos - max_height_i,
       across(contains("height"), ~ format(round(.x, 2), nsmall = 2)),
-      distance = format(round(distance, 1), nsmall = 1)
-    ) %>%
-    mutate(
-      last_height_comb = paste0(
-        last_heightdiff, " (",
-        height_pos, ", ",
-        height_i, ")"
-      ),
-      mean_height_comb = paste0(
-        mean_heightdiff, " (",
-        mean_height_pos, ", ",
-        mean_height_i, ")"
-      )
+      last_heightdiff = paste0(height_pos, " (", last_heightdiff, ")"),
+      mean_heightdiff = paste0(mean_height_pos, " (", mean_heightdiff, ")"),
+      max_heightdiff = paste0(max_height_pos, " (", max_heightdiff, ")"),
+      distance = format(round(distance, 1), nsmall = 1),
+      timediff = round(timediff)
     ) %>%
     arrange(timediff) %>%
     dplyr::select(
       new_track_id_i,
       new_track_id_pos,
-      last_height_comb,
-      mean_height_comb,
       dur,
+      last_heightdiff,
+      mean_heightdiff,
+      max_heightdiff,
       timediff,
       distance
     ) %>%
     set_names(
-      "ID",
-      "Links",
-      "Last heightdiff [cm]",
-      "Mean heightdiff [cm]",
-      "Duration [min]",
-      "Timediff [sec]",
-      "Distance [m]"
+      "Select ID",
+      "Link ID",
+      "Duration",
+      "Last HD",
+      "Sit HD",
+      "Stand HD",
+      "Timediff",
+      "Distance"
     ) %>%
     mutate_all(as.character)
 
@@ -490,8 +631,10 @@ table_ids <- function(df_i, df_pos, direction) {
   if (n_pos_ids > 0) {
     for (i in 1:n_pos_ids) {
       col <- scales::hue_pal()(n_pos_ids)[i]
-      for (k in 2:6) {
-        df_feat[i, k] <- paste0('<span style="color:', col, '">', df_feat[i, k], "</span>")
+      for (k in 2:8) {
+        df_feat[i, k] <- paste0(
+          '<span style="color:', col, '">', df_feat[i, k], "</span>"
+        )
       }
     }
   }
@@ -499,6 +642,68 @@ table_ids <- function(df_i, df_pos, direction) {
   return(df_feat)
 }
 
+plot_sequence <- function(values) {
+  if (is.null(values$dat)) {
+    return(ggplot() +
+      theme_classic())
+  }
+  track_seq <- values$dat %>%
+    filter(category == "sure" | new_track_id == values$select_id) %>%
+    group_by(new_track_id) %>%
+    mutate(period = cumsum(
+      in_check_tb != lag(in_check_tb, default = first(in_check_tb))
+    )) %>%
+    ungroup() %>%
+    filter(in_check_tb) %>%
+    group_by(new_track_id, period) %>%
+    summarise(
+      min_time = min(time),
+      max_time = max(time)
+    ) %>%
+    ungroup() %>%
+    mutate(
+      across(
+        c(min_time, max_time),
+        ~ as.POSIXct(.x / 1000, origin = "1970-01-01")
+      ),
+      mark = ifelse(new_track_id == values$select_id, "id", "other")
+    ) %>%
+    arrange(min_time) %>%
+    mutate(new_track_id = factor(
+      new_track_id,
+      levels = unique(new_track_id)
+    )) %>%
+    ungroup()
+  track_seq_pl <- ggplot(
+    mapping = aes(x = min_time, y = new_track_id)
+  ) +
+    geom_segment(
+      data = track_seq,
+      mapping = aes(
+        xend = max_time,
+        group = period,
+        color = mark
+      ),
+      linewidth = 2
+    ) +
+    geom_text(
+      data = track_seq %>%
+        group_by(new_track_id) %>%
+        slice(1),
+      mapping = aes(label = new_track_id),
+      size = 8 / cm(1),
+      nudge_x = -10 * 60,
+      nudge_y = 0
+    ) +
+    theme_classic() +
+    theme(
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      legend.position = "none"
+    )
+  return(track_seq_pl)
+}
 
 #### Shiny UI ####
 ui <- fluidPage(
@@ -535,13 +740,14 @@ ui <- fluidPage(
         "show_ids", "Show",
         choices = list(
           "Maybe" = 1,
-          "Maybe (checked)" = 2,
-          "Sure" = 3,
-          "Sure (checked)" = 4
+          "Possible" = 2,
+          "Likely" = 3,
+          "Sure" = 4
         ),
-        selected = 3,
+        selected = 4,
         inline = TRUE
       ),
+      actionButton("prev_id", "Previous ID"),
       actionButton("next_id", "Next ID"),
       br(),
       br(),
@@ -553,6 +759,18 @@ ui <- fluidPage(
       div(
         tags$span("ID:", class = "bold-prefix"),
         textOutput("id_info"),
+        style = "display: flex;"
+      ),
+      br(),
+      div(
+        tags$span("Time:", class = "bold-prefix"),
+        textOutput("id_time"),
+        style = "display: flex;"
+      ),
+      br(),
+      div(
+        tags$span("Height:", class = "bold-prefix"),
+        textOutput("id_height"),
         style = "display: flex;"
       ),
       br(),
@@ -573,12 +791,6 @@ ui <- fluidPage(
         post = "m"
       ),
       selectizeInput(
-        "alt_id", "Show alternatives for ID",
-        choices = -1,
-        selected = -1,
-        options = list(maxItems = 1)
-      ),
-      selectizeInput(
         "pos_id", "Link with ID",
         choices = -1,
         selected = -1,
@@ -591,9 +803,9 @@ ui <- fluidPage(
       br(),
       selectInput(
         "is_tb", "Is TB patient?",
-        choices = c("Not TB", "Sure TB")
+        choices = c("not TB", "maybe", "possible", "likely", "sure")
       ),
-      actionButton("finish", "Finish"),
+      actionButton("finish", "Enter"),
       br(),
       br(),
       div(
@@ -605,7 +817,9 @@ ui <- fluidPage(
     mainPanel(
       plotOutput("clinic", inline = TRUE),
       br(),
-      tableOutput("links_table")
+      tableOutput("links_table"),
+      br(),
+      plotOutput("sequence", inline = TRUE)
     )
   )
 )
@@ -617,21 +831,22 @@ server <- function(input, output, session) {
   #### Load data ####
   values <- reactiveValues(
     dat = NULL, # data
-    ids = NULL, # IDs
-    ids_pu = NULL, # possible checked IDs
-    ids_pc = NULL, # possible unchecked IDs
-    ids_du = NULL, # definitive unchecked IDs
-    ids_dc = NULL, # definitive checked IDS
-    current_id_type = NULL,
-    previous_id_type = TRUE,
-    update_id = TRUE,
+    ids_pu = NULL, # maybe
+    ids_pc = NULL, # possible
+    ids_du = NULL, # likely
+    ids_dc = NULL, # sure
+    select_id = NULL,
+    prev_id = NULL,
+    next_id = NULL,
     dat_i = NULL, # data of selected id
     dat_o = NULL, # data of other possible id links
     dat_o_feat = NULL, # feature data of other
     dat_os_feat = NULL, # subset of feature data
     dat_a = NULL # data of alternatives for selected other possible id link
   )
+
   observeEvent(input$file, {
+    req(input$file)
     # get file
     file <- input$file
 
@@ -639,179 +854,148 @@ server <- function(input, output, session) {
     values$dat <- read_tracking(file$datapath)
 
     # date
-    date <- as.Date(as.POSIXct(
+    file_date <- as.Date(as.POSIXct(
       values$dat$time[1] / 1000,
       origin = "1970-01-01"
     ))
 
-    # update ID subsets
+    # update ID selection
     update_ids(values)
-
-    # update patient ID selection
-    values$current_id_type <- 3
-    if (length(values$ids_du) > 0) {
-      first_id <- values$ids_du[1]
-    } else {
-      first_id <- values$ids_dc[1]
-    }
-
-    updateSelectizeInput(
-      session, "id",
-      choices = values$ids,
-      selected = first_id,
-      server = TRUE
-    )
-
-    # initial counts
-    output$tracking_ids <- renderText({
-      display_id_counts(values$dat)
-    })
+    values$select_id <- values$ids_dc[1]
+    update_id_selection(session, values)
 
     # clinic ID count
+    clin_sub <- subset(clinic, date == file_date)
+    n_clin_id <- n_distinct(clin_sub$clinic_id)
+    n_sputum <- n_clin_id - sum(clin_sub$tb_test_res == "")
+    min_time <- format(min(as.POSIXct(clin_sub$start_time)), "%H:%M")
+    max_time <- format(max(as.POSIXct(clin_sub$start_time)), "%H:%M")
     output$clinical_ids <- renderText({
-      n_distinct(clinic$clinic_id[clinic$date == date])
+      paste0(
+        n_sputum, "/", n_clin_id,
+        " sputum [", min_time, " to ", max_time, "]"
+      )
     })
 
     # directory to save file
     values$save_file <- paste0(
-      "../data-clean/tracking/linked-tb/", date, ".csv"
+      "../data-clean/tracking/linked-tb/", file_date, ".csv"
     )
     output$saveto <- renderText({
       values$save_file
     })
   })
 
-  #### Select ID ####
-  # show ID subset
+  #### Show subset of IDs ####
   observeEvent(input$show_ids, {
-    if (input$show_ids == 1) {
-      next_selected <- values$ids_pu[1]
-    } else if (input$show_ids == 2) {
-      next_selected <- values$ids_pc[1]
-    } else if (input$show_ids == 3) {
-      next_selected <- values$ids_du[1]
+    show_type <- input$show_ids
+    if (show_type == 1) {
+      values$select_id <- values$ids_pu[1]
+    } else if (show_type == 2) {
+      values$select_id <- values$ids_pc[1]
+    } else if (show_type == 3) {
+      values$select_id <- values$ids_du[1]
     } else {
-      next_selected <- values$ids_dc[1]
+      values$select_id <- values$ids_dc[1]
     }
-    if (values$update_id) {
-      updateSelectizeInput(
-        session,
-        inputId = "id",
-        choices = values$ids,
-        selected = next_selected,
-        server = TRUE
-      )
+    if (!is.null(values$select_id)) {
+      update_id_selection(session, values)
     }
   })
 
-  # select next ID
+  #### Select next ID ####
+  # 1. Mark the selected ID as seen
+  # 2. Update linkage
+  # 3. Select next ID of subset
+  # 4. Update selection
   observeEvent(input$next_id, {
-    req(input$id)
-    id <- as.integer(input$id)
-    if (input$show_ids == 1) {
-      values$ids_pu <- values$ids_pu[values$ids_pu != id]
-      values$ids_pc <- c(values$ids_pc, id)
-      values$dat$seen[values$dat$new_track_id == id] <- TRUE
-      next_selected <- values$ids_pu[1]
-      update_linkage(values$dat, values$save_file)
-    } else if (input$show_ids == 2) {
-      next_selected <- values$ids_pc[values$ids_pc > id][1]
-    } else if (input$show_ids == 3) {
-      values$ids_du <- values$ids_du[values$ids_du != id]
-      values$ids_dc <- c(values$ids_dc, id)
-      values$dat$seen[values$dat$new_track_id == id] <- TRUE
-      next_selected <- values$ids_du[1]
-      update_linkage(values$dat, values$save_file)
+    values$select_id <- values$next_id
+    update_id_selection(session, values)
+  })
+
+  #### Select previous ID ####
+  # 1. Select next ID of subset
+  # 2. Update selection
+  observeEvent(input$prev_id, {
+    values$select_id <- values$prev_id
+    update_id_selection(session, values)
+  })
+
+  #### ID Data ####
+  # 1. Get selected ID and update info
+  # 2. Silently update inputs without triggering new selection
+  # 3. Compute features of possible links
+  observeEvent(input$id, {
+    # check if data and ID exist
+    if (is.null(values$dat)) {
+      return()
     } else {
-      next_selected <- values$ids_dc[values$ids_dc > id][1]
+      if (is.na(input$id)) {
+        return()
+      } else {
+        values$select_id <- as.integer(input$id)
+      }
     }
-    updateSelectizeInput(
-      session,
-      inputId = "id",
-      choices = values$ids,
-      selected = next_selected,
-      server = TRUE
+
+    # update ID data and information
+    values$dat_i <- values$dat[values$dat$new_track_id == values$select_id, ]
+    output$id_info <- renderText({
+      update_info(values)
+    })
+    output$id_time <- renderText({
+      update_time(values)
+    })
+    output$id_height <- renderText({
+      update_height(values, input$direction)
+    })
+    output$date <- renderText({
+      update_datetime(values)
+    })
+    output$tracking_ids <- renderText({
+      update_counts(values)
+    })
+
+    # update several inputs
+    updateRadioButtons(session, "direction", selected = 1)
+    updateSliderTextInput(session, "time", selected = default_time)
+    updateSliderTextInput(session, "distance", selected = default_dist)
+
+    # compute features for others
+    values$dat_o_feat <- filter_tracks(
+      values$dat,
+      values$select_id,
+      input$direction
+    )
+    values$dat_o_feat <- compute_features(
+      values$dat_o_feat,
+      input$direction
     )
   })
 
-  #### Data ####
-
-  # ID data and
-  observeEvent(input$id, {
-    if (!is.null(values$dat)) {
-      # get id
-      id <- as.integer(input$id)
-      if (is.na(id)) {
-        return()
-      }
-
-      # filter id data
-      values$dat_i <- values$dat[values$dat$new_track_id == id, ]
-
-      # update inputs
-      # ID type should be silently updated for manually selected IDs
-      values$previous_id_type <- values$current_id_type
-      values$current_id_type <- case_when(
-        values$dat_i$tb[1] & !values$dat_i$seen[1] & !values$dat_i$sure_tb[1] ~ 1,
-        values$dat_i$tb[1] & values$dat_i$seen[1] & !values$dat_i$sure_tb[1] ~ 2,
-        values$dat_i$tb[1] & !values$dat_i$seen[1] & values$dat_i$sure_tb[1] ~ 3,
-        values$dat_i$tb[1] & values$dat_i$seen[1] & values$dat_i$sure_tb[1] ~ 4
-      )
-      if (values$previous_id_type == values$current_id_type) {
-        values$update_id <- TRUE
-      } else {
-        values$update_id <- FALSE
-        updateRadioButtons(
-          session,
-          "show_ids",
-          selected = values$current_id_type
-        )
-      }
-      updateRadioButtons(session, "direction", selected = 1)
-      updateSliderTextInput(session, "time", selected = default_time)
-      updateSliderTextInput(session, "distance", selected = default_dist)
-
-      # update info
-      values$i_links <- n_distinct(values$dat_i$track_id) - 1
-      output$id_info <- renderText({
-        paste0(
-          duration_min_sec(values$dat_i$time),
-          " (TB: ", duration_min_sec(values$dat_i$time, values$dat_i$in_tb_pat),
-          ", Vitals: ", duration_min_sec(values$dat_i$time, values$dat_i$in_vitals_pat),
-          ", Links: ", values$i_links, ")"
-        )
-      })
-      output$date <- renderText({
-        update_datetime(values$dat, id)
-      })
-      output$tracking_ids <- renderText({
-        display_id_counts(values$dat)
-      })
-
-      # compute features for others
-      values$dat_o_feat <- filter_tracks(values$dat, id, input$direction)
-      values$dat_o_feat <- compute_features(values$dat_o_feat, input$direction)
-    }
-  })
-
+  #### Switch linking direction ####
   observeEvent(input$direction, {
     if (
       !is.null(values$dat) &
         !is.null(values$dat_i) &
         !is.null(values$dat_o_feat)
     ) {
-      id <- as.integer(input$id)
       # compute features for others
-      values$dat_o_feat <- filter_tracks(values$dat, id, input$direction)
-      values$dat_o_feat <- compute_features(values$dat_o_feat, input$direction)
+      values$dat_o_feat <- filter_tracks(
+        values$dat,
+        values$select_id,
+        input$direction
+      )
+      values$dat_o_feat <- compute_features(
+        values$dat_o_feat,
+        input$direction
+      )
     }
   })
 
-  # possible link ID data
+  #### Show possible links ####
   observe({
     # get possible links
     if (!is.null(values$dat_o_feat)) {
-      id <- as.integer(input$id)
       if (nrow(values$dat_o_feat) > 0) {
         values$dat_os_feat <- values$dat_o_feat %>%
           filter(
@@ -835,34 +1019,38 @@ server <- function(input, output, session) {
     if (!is.null(values$dat_o)) {
       pos_ids <- pos_ids[order(values$dat_os_feat$timediff_raw)]
       updateSelectizeInput(session, inputId = "pos_id", choices = pos_ids)
-      updateSelectizeInput(session, inputId = "alt_id", choices = pos_ids)
     } else {
       updateSelectizeInput(session, inputId = "pos_id", choices = -1)
-      updateSelectizeInput(session, inputId = "alt_id", choices = -1)
     }
   })
 
-  # alternatives data
-  observeEvent(input$alt_id, {
-    if (!is.null(values$dat_o)) {
-      alt_id <- as.integer(input$alt_id)
-      id <- as.integer(input$id)
-      dat_o_i <- filter(values$dat, new_track_id == alt_id)
+  #### Show possible alternatives ####
+  observeEvent(input$pos_id, {
+    if (!is.null(values$dat_os_feat)) {
+      pos_id <- as.integer(input$pos_id)
+      pos_id_td <- values$dat_os_feat[
+        values$dat_os_feat$new_track_id_other == pos_id,
+        "timediff"
+      ]
+      pos_id_dist <- values$dat_os_feat[
+        values$dat_os_feat$new_track_id_other == pos_id,
+        "distance"
+      ]
       values$dat_a_feat <- filter_tracks(
         values$dat,
-        alt_id,
+        pos_id,
         ifelse(input$direction == 1, 2, 1)
       ) %>%
-        filter(new_track_id_other != id)
-      if (nrow(values$dat_a_feat) > 0) {
+        filter(new_track_id_other != values$select_id)
+      if (nrow(values$dat_a_feat) > 0 & length(pos_id_td) > 0) {
         values$dat_a_feat <- compute_features(
           values$dat_a_feat,
           ifelse(input$direction == 1, 2, 1)
         )
         dat_as_feat <- values$dat_a_feat %>%
           filter(
-            timediff <= alt_time,
-            distance <= alt_dist
+            timediff <= pmax(pos_id_td, min_alt_time),
+            distance <= pmax(pos_id_dist, min_alt_dist)
           )
         alt_ids <- dat_as_feat$new_track_id_other
         values$dat_a <- filter(values$dat, new_track_id %in% alt_ids)
@@ -876,131 +1064,98 @@ server <- function(input, output, session) {
 
 
   #### New link ####
+  # 1. Link IDs and choose the selected ID as the new ID for both
+  # 2. Keep seen and TB status
   observeEvent(input$link, {
-    # make link
-    id <- as.integer(input$id)
     pos_id <- as.integer(input$pos_id)
     if (pos_id == -1) {
       shinyalert(
         "Error: -1",
-        name_linkage_success,
-        type = "success",
+        "No ID selected to link with.",
+        type = "error",
         timer = 1000
       )
     } else {
-      linked_ids <- c(id, pos_id)
-      new_id <- max(linked_ids)
-      name_linkage_success <- paste("ID", id, "linked to", pos_id, ".")
       shinyalert(
         "Success",
-        name_linkage_success,
+        paste("Linking ID", values$select_id, "to", pos_id, "."),
         type = "success",
         timer = 1000
       )
-      values$dat$new_track_id[values$dat$new_track_id %in% linked_ids] <- new_id
-      values$dat$seen[values$dat$new_track_id == new_id] <- FALSE
-      values$dat$tb[values$dat$new_track_id == new_id] <- TRUE
-      values$dat$sure_tb[values$dat$new_track_id == new_id] <- any(values$dat$sure_tb[values$dat$new_track_id == new_id])
-      update_linkage(values$dat, values$save_file)
-
-      # update selection
+      link_id_track <- values$dat$new_track_id %in% c(values$select_id, pos_id)
+      select_id_track <- values$dat$new_track_id == values$select_id
+      values$dat$new_track_id[link_id_track] <- values$select_id
+      values$dat$category[link_id_track] <- values$dat$category[select_id_track][1]
+      update_linkage(values)
       update_ids(values)
-      updateSelectizeInput(
-        inputId = "id",
-        choices = values$ids,
-        selected = new_id,
-        server = TRUE
-      )
+      update_id_selection(session, values)
     }
   })
 
-  #### Un-link ####
+  #### Unlink last ID ####
+  # 1. Unlink last ID and choose second last as new ID
+  # 2. Mark the unlinked ID as seen and move to maybe TB
+  # 3. Do not update seen of the selected ID, neither TB status
   observeEvent(input$unlink_last, {
-    # unlink last ID
-    last_id <- as.integer(input$id)
-    old_id <- tail(sort(unique(
-      values$dat$track_id[values$dat$new_track_id == last_id]
-    )), 2)[1]
+    link_id_track <- values$dat$new_track_id == values$select_id
+    linked_ids <- unique(values$dat$track_id[link_id_track])
+    last_id <- linked_ids[length(linked_ids)]
+    values$select_id <- linked_ids[length(linked_ids) - 1]
     shinyalert(
-      "Info",
-      paste("Unlinking ID", last_id, "from", old_id),
+      "Success",
+      paste("Unlinking ID", last_id, "from", values$select_id),
       type = "info",
       timer = 1000
     )
-    values$dat$new_track_id[values$dat$new_track_id == last_id & values$dat$track_id != last_id] <- old_id
-    values$dat$seen[values$dat$new_track_id %in% c(last_id, old_id)] <- FALSE
-    update_linkage(values$dat, values$save_file)
-
-    # update selection
+    unlink_id_track <- values$dat$track_id %in% setdiff(linked_ids, last_id)
+    last_id_track <- values$dat$track_id == last_id
+    values$dat$new_track_id[unlink_id_track] <- values$select_id
+    values$dat$new_track_id[last_id_track] <- last_id
+    values$dat$category[last_id_track] <- "possible"
+    update_linkage(values)
     update_ids(values)
-    updateSelectizeInput(
-      inputId = "id",
-      choices = values$ids,
-      selected = old_id,
-      server = TRUE
-    )
+    update_id_selection(session, values)
   })
 
+  #### Unlink first ID ####
+  # 1. Unlink first ID and choose last as new ID
+  # 2. Mark the unlinked ID as seen and move to maybe TB
+  # 3. Do not update seen of the selected ID, neither TB status
   observeEvent(input$unlink_first, {
-    # unlink first ID
-    last_id <- as.integer(input$id)
-    old_id <- sort(unique(
-      values$dat$track_id[values$dat$new_track_id == last_id]
-    ))[1]
-    values$dat$new_track_id[values$dat$track_id == old_id] <- old_id
-    values$dat$seen[values$dat$track_id %in% c(last_id, old_id)] <- FALSE
-    update_linkage(values$dat, values$save_file)
+    link_id_track <- values$dat$new_track_id == values$select_id
+    linked_ids <- unique(values$dat$track_id[link_id_track])
+    first_id <- linked_ids[1]
+    values$select_id <- linked_ids[length(linked_ids)]
     shinyalert(
-      "Info",
-      paste("Unlinking ID", last_id, "from", old_id),
+      "Success",
+      paste("Unlinking ID", first_id, "from", values$select_id),
       type = "info",
       timer = 1000
     )
-
-    # update selection
+    unlink_id_track <- values$dat$track_id %in% setdiff(linked_ids, first_id)
+    first_id_track <- values$dat$track_id == first_id
+    values$dat$new_track_id[unlink_id_track] <- values$select_id
+    values$dat$new_track_id[first_id_track] <- first_id
+    values$dat$category[first_id_track] <- "possible"
+    update_linkage(values)
     update_ids(values)
-    updateSelectizeInput(
-      inputId = "id",
-      choices = values$ids,
-      selected = last_id,
-      server = TRUE
-    )
+    update_id_selection(session, values)
   })
 
 
-  #### End track ####
+  #### Categorize track  ####
   observeEvent(input$finish, {
-    req(input$id)
-    req(input$show_ids)
-    # update mapping
-    id <- as.integer(input$id)
-    is_tb <- (input$is_tb == "Sure TB")
-    values$dat$sure_tb[values$dat$new_track_id == id] <- is_tb
-    values$dat$tb[values$dat$new_track_id == id] <- is_tb
-    values$dat$seen[values$dat$new_track_id == id] <- TRUE
-    update_linkage(values$dat, values$save_file)
     shinyalert(
-      "Done.",
-      paste("ID", input$id, "is", input$is_tb),
+      "Success",
+      paste("ID", values$select_id, "is", input$is_tb),
       type = "info",
       timer = 1000
     )
+    values$dat$category[values$dat$new_track_id == values$select_id] <- input$is_tb
+    update_linkage(values)
     update_ids(values)
-    if (is_tb) {
-      next_selected <- id
-    } else {
-      if (length(values$ids_du) > 0) {
-        next_selected <- values$ids_du[1]
-      } else {
-        next_selected <- values$ids_dc[1]
-      }
-    }
-    updateSelectizeInput(
-      inputId = "id",
-      choices = values$ids,
-      selected = next_selected,
-      server = TRUE
-    )
+    values$select_id <- values$next_id
+    update_id_selection(session, values)
   })
 
 
@@ -1015,8 +1170,8 @@ server <- function(input, output, session) {
         values$dat_os_feat
       )
     },
-    height = 800,
-    width = 1200
+    height = 600,
+    width = 600 * 3.33
   )
 
   #### Table ####
@@ -1025,6 +1180,14 @@ server <- function(input, output, session) {
       table_ids(values$dat_i, values$dat_o, input$direction)
     },
     sanitize.text.function = function(x) x
+  )
+
+  output$sequence <- renderPlot(
+    {
+      plot_sequence(values)
+    },
+    height = 400,
+    width = 1000
   )
 }
 
