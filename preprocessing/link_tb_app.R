@@ -79,6 +79,7 @@ read_tracking <- function(file) {
       "track_id",
       "time",
       "position_x", "position_y", "person_height",
+      "tag",
       "near_entry", "in_check", "in_check_tb", "in_sputum"
     ),
     integer64 = "numeric"
@@ -116,6 +117,7 @@ read_tracking <- function(file) {
     links <- tracks %>%
       group_by(new_track_id) %>%
       summarise(
+        tag = any(tag),
         start_time = as.POSIXct(min(time) / 1000, origin = "1970-01-01"),
         time_tb = sum(c(NA, diff(time))[in_check_tb], na.rm = TRUE) / 1000,
         sputum = any(in_sputum),
@@ -125,14 +127,15 @@ read_tracking <- function(file) {
       ungroup() %>%
       mutate(
         category = case_when(
-          sputum ~ "sure",
-          !sputum & between(time_tb, 60, 300) ~ "possible",
-          !sputum & between(time_tb, 30, 59) ~ "maybe",
-          !sputum & between(time_tb, 61, 1200) ~ "maybe",
-          !sputum & !between(time_tb, 60, 300) & missing_start ~ "maybe",
-          !sputum & !between(time_tb, 60, 300) & missing_end ~ "maybe",
+          between(time_tb, 60, 300) ~ "possible",
+          between(time_tb, 30, 59) ~ "maybe",
+          between(time_tb, 61, 1200) ~ "maybe",
+          !between(time_tb, 60, 300) & missing_start ~ "maybe",
+          !between(time_tb, 60, 300) & missing_end ~ "maybe",
           .default = "not TB"
         ),
+        category = ifelse(sputum, "sure", category),
+        category = ifelse(tag, "not TB", category),
         category = ifelse(start_time > last_clin_time, "not TB", category)
       ) %>%
       left_join(mappings, by = "new_track_id") %>%
@@ -178,6 +181,9 @@ update_ids <- function(values) {
   values$ids_dc <- as.integer(unique(
     values$dat$new_track_id[values$dat$category == "sure"]
   ))
+  values$ids_sp <- as.integer(unique(
+    values$dat$new_track_id[values$dat$category == "sputum only"]
+  ))
 }
 
 get_next_id <- function(x, id) {
@@ -208,8 +214,10 @@ update_id_selection <- function(session, values) {
     show <- 2
   } else if (cat == "likely") {
     show <- 3
-  } else {
+  } else if (cat == "sure") {
     show <- 4
+  } else {
+    show <- 5
   }
   if (show == 1) {
     values$prev_id <- get_prev_id(values$ids_pu, values$select_id)
@@ -238,12 +246,21 @@ update_id_selection <- function(session, values) {
       selected = values$select_id,
       server = TRUE
     )
-  } else {
+  } else if (show == 4) {
     values$prev_id <- get_prev_id(values$ids_dc, values$select_id)
     values$next_id <- get_next_id(values$ids_dc, values$select_id)
     updateSelectizeInput(
       session, "id",
       choices = values$ids_dc,
+      selected = values$select_id,
+      server = TRUE
+    )
+  } else {
+    values$prev_id <- get_prev_id(values$ids_sp, values$select_id)
+    values$next_id <- get_next_id(values$ids_sp, values$select_id)
+    updateSelectizeInput(
+      session, "id",
+      choices = values$ids_sp,
       selected = values$select_id,
       server = TRUE
     )
@@ -261,8 +278,10 @@ update_info <- function(values) {
     show <- 2
   } else if (cat == "likely") {
     show <- 3
-  } else {
+  } else if (cat == "sure") {
     show <- 4
+  } else {
+    show <- 5
   }
   if (cat == "maybe") {
     n <- length(values$ids_pu)
@@ -273,9 +292,12 @@ update_info <- function(values) {
   } else if (cat == "likely") {
     n <- length(values$ids_du)
     i <- which(values$ids_du == values$dat_i$new_track_id[1])
-  } else {
+  } else if (cat == "sure") {
     n <- length(values$ids_dc)
     i <- which(values$ids_dc == values$dat_i$new_track_id[1])
+  } else {
+    n <- length(values$ids_sp)
+    i <- which(values$ids_sp == values$dat_i$new_track_id[1])
   }
   links <- n_distinct(values$dat_i$track_id) - 1
   info <- paste0(
@@ -324,9 +346,11 @@ update_counts <- function(values) {
     n_pc <- length(values$ids_pc)
     n_du <- length(values$ids_du)
     n_dc <- length(values$ids_dc)
+    n_sp <- length(values$ids_sp)
     counts <- paste0(
       "Ma: ", n_pu, ", Po: ", n_pc,
-      ", Li: ", n_du, " Su: ", n_dc
+      ", Li: ", n_du, " Su: ", n_dc,
+      ", Sp: ", n_sp
     )
     return(counts)
   }
@@ -342,18 +366,6 @@ update_linkage <- function(values) {
     file = values$save_file,
     row.names = FALSE
   )
-}
-
-update_seen <- function(values, id, is_seen) {
-  values$dat$seen[values$dat$new_track_id == id] <- is_seen
-}
-
-update_tb <- function(values, id, is_tb) {
-  values$dat$tb[values$dat$new_track_id == id] <- is_tb
-}
-
-update_sure_tb <- function(values, id, is_sure_tb) {
-  values$dat$sure_tb[values$dat$new_track_id == id] <- is_sure_tb
 }
 
 filter_tracks <- function(df, id, direction = 1) {
@@ -373,6 +385,7 @@ filter_tracks <- function(df, id, direction = 1) {
       group_by(new_track_id) %>%
       slice(1) %>%
       ungroup() %>%
+      filter(!tag) %>%
       filter(between(time, earliest, latest))
   } else {
     # current id
@@ -674,13 +687,13 @@ plot_sequence <- function(values) {
       levels = unique(new_track_id)
     )) %>%
     ungroup()
-  track_seq_pl <- ggplot(
-    mapping = aes(x = min_time, y = new_track_id)
-  ) +
+  track_seq_pl <- ggplot() +
     geom_segment(
       data = track_seq,
       mapping = aes(
+        x = min_time,
         xend = max_time,
+        y = new_track_id,
         group = period,
         color = mark
       ),
@@ -690,11 +703,31 @@ plot_sequence <- function(values) {
       data = track_seq %>%
         group_by(new_track_id) %>%
         slice(1),
-      mapping = aes(label = new_track_id),
+      mapping = aes(
+        x = min_time,
+        y = new_track_id,
+        label = new_track_id
+      ),
       size = 8 / cm(1),
       nudge_x = -10 * 60,
       nudge_y = 0
-    ) +
+    )
+
+  if (as.Date(values$clin$date[1]) > as.Date("2024-07-20")) {
+    track_seq_pl <- track_seq_pl +
+      geom_rect(
+        data = values$clin,
+        mapping = aes(
+          xmin = start_time,
+          xmax = completion_time,
+          ymin = -Inf,
+          ymax = Inf
+        ),
+        fill = "yellow",
+        alpha = 0.2
+      )
+  }
+  track_seq_pl <- track_seq_pl +
     theme_classic() +
     theme(
       axis.title.x = element_blank(),
@@ -742,7 +775,8 @@ ui <- fluidPage(
           "Maybe" = 1,
           "Possible" = 2,
           "Likely" = 3,
-          "Sure" = 4
+          "Sure" = 4,
+          "Sputum"
         ),
         selected = 4,
         inline = TRUE
@@ -803,7 +837,14 @@ ui <- fluidPage(
       br(),
       selectInput(
         "is_tb", "Is TB patient?",
-        choices = c("not TB", "maybe", "possible", "likely", "sure")
+        choices = c(
+          "not TB",
+          "maybe",
+          "possible",
+          "likely",
+          "sure",
+          "sputum only"
+        )
       ),
       actionButton("finish", "Enter"),
       br(),
@@ -830,7 +871,8 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   #### Load data ####
   values <- reactiveValues(
-    dat = NULL, # data
+    dat = NULL, # tracking data
+    clin = NULL, # clinical data
     ids_pu = NULL, # maybe
     ids_pc = NULL, # possible
     ids_du = NULL, # likely
@@ -866,10 +908,13 @@ server <- function(input, output, session) {
 
     # clinic ID count
     clin_sub <- subset(clinic, date == file_date)
-    n_clin_id <- n_distinct(clin_sub$clinic_id)
-    n_sputum <- n_clin_id - sum(clin_sub$tb_test_res == "")
-    min_time <- format(min(as.POSIXct(clin_sub$start_time)), "%H:%M")
-    max_time <- format(max(as.POSIXct(clin_sub$start_time)), "%H:%M")
+    values$clin <- clin_sub
+    values$clin$start_time <- as.POSIXct(values$clin$start_time)
+    values$clin$completion_time <- as.POSIXct(values$clin$completion_time)
+    n_clin_id <- n_distinct(values$clin$clinic_id)
+    n_sputum <- n_clin_id - sum(values$clin$tb_test_res == "")
+    min_time <- format(min(values$clin$start_time), "%H:%M")
+    max_time <- format(max(values$clin$start_time), "%H:%M")
     output$clinical_ids <- renderText({
       paste0(
         n_sputum, "/", n_clin_id,
@@ -895,8 +940,10 @@ server <- function(input, output, session) {
       values$select_id <- values$ids_pc[1]
     } else if (show_type == 3) {
       values$select_id <- values$ids_du[1]
-    } else {
+    } else if (show_type == 4) {
       values$select_id <- values$ids_dc[1]
+    } else {
+      values$select_id <- values$ids_sp[1]
     }
     if (!is.null(values$select_id)) {
       update_id_selection(session, values)
