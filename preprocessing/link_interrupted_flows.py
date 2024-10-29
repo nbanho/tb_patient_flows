@@ -227,7 +227,9 @@ def read_and_process_tracks(file: str, pars = list):
 
 if __name__ == "__main__":
         # files
-        unlinked_files = ["2024-07-26.csv"] # unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv')]
+        files_to_remove = ["2024-06-20.csv", "2024-06-24.csv", "2024-07-03.csv", "2024-07-26"]
+        unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv') and f not in files_to_remove]
+        # unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv')]
         
         # processing parameters
         max_time_quick = [5, 5, 10, 10, 20, 20, 30, 30]
@@ -248,7 +250,7 @@ if __name__ == "__main__":
             raise ValueError("Parameter lists must be of the same length.")
         
         # settings
-        num_cores = 1
+        num_cores = 4
         
         with ProcessPoolExecutor(max_workers=num_cores) as executor:
                 executor.map(
