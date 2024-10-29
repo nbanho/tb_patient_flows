@@ -1,6 +1,8 @@
 # Files
 data-raw/*
 data-clean/*
+!data-clean/tracking/linked-tb/.gitkeep
+!data-clean/clinical/.gitkeep
 doc/*
 test-data/*
 *.DS_Store
