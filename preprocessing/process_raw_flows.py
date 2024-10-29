@@ -75,6 +75,7 @@ def annotate_xy(df: pd.DataFrame, polygon: Polygon, col_name: str) -> pd.DataFra
 def process_file(filename, in_fold_path, out_fold_path, time_filter, distance_filter, entry_polygon, seating_polygon, check_polygon, check_tb_polygon, sputum_polygon):
         print(f"Processing file: {os.path.join(in_fold_path, filename)}")
         df = pd.read_csv(os.path.join(in_fold_path, filename))
+        df['tag'] = df.groupby('track_id')['tag'].transform(lambda x: (x == 'TAG_1').any())
         df = filter_tracks(df, time_filter, distance_filter)
         df = annotate_xy(df, entry_polygon, 'near_entry')
         df = annotate_xy(df, seating_polygon, 'in_seating')
@@ -161,7 +162,7 @@ if __name__ == "__main__":
         sputum_area_polygon = Polygon(sputum_area['geometry'])
         
         # Get list of CSV files
-        csv_files = ["2024-07-03.csv"] # [f for f in os.listdir(folder_path) if f.endswith('.csv')]
+        csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
         
         # Specify the number of cores to use
         num_cores = 3

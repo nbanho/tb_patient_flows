@@ -146,7 +146,8 @@ grouped_files = {date: files for date, files in grouped_files.items() if datetim
 grouped_files = dict(sorted(grouped_files.items(), key=lambda item: datetime.strptime(item[0], '%Y-%m-%d')))
 
 # process files by date
-for date in list(grouped_files.keys()):
-		print(f"Processing files for date: {date}")
-		process_event_files_in_folder(folder_path, grouped_files[date], "data-clean/tracking/unlinked/", date)
+# for date in list(grouped_files.keys()):
+# 		print(f"Processing files for date: {date}")
+# 		process_event_files_in_folder(folder_path, grouped_files[date], "data-clean/tracking/unlinked/", date)
 
+process_event_files_in_folder(folder_path, grouped_files["2024-07-03"], "data-clean/tracking/unlinked/", "2024-07-03")

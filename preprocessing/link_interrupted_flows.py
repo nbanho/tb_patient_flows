@@ -93,6 +93,13 @@ def link_interrupted_tracks(df: pd.DataFrame, track_id: int, max_time_walk: int,
     potential_matches = df.drop_duplicates(subset='track_id', keep='first')
     potential_matches = potential_matches[potential_matches['time'] > last_point['time']]
     potential_matches = potential_matches[potential_matches['near_entry'] == False]
+    
+    # filter patients vs staff
+    if last_point['tag'] == True:
+        potential_matches = potential_matches[potential_matches['tag'] == True]
+    else:
+        potential_matches = potential_matches[potential_matches['tag'] == False]
+        
     if potential_matches.empty:
         return False, 0, df
     
@@ -220,7 +227,7 @@ def read_and_process_tracks(file: str, pars = list):
 
 if __name__ == "__main__":
         # files
-        unlinked_files = ["2024-06-24.csv"] # unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv')]
+        unlinked_files = ["2024-07-26.csv"] # unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv')]
         
         # processing parameters
         max_time_quick = [5, 5, 10, 10, 20, 20, 30, 30]

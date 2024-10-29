@@ -127,9 +127,9 @@ read_tracking <- function(file) {
       ungroup() %>%
       mutate(
         category = case_when(
-          between(time_tb, 60, 300) ~ "possible",
+          between(time_tb, 60, 600) ~ "possible",
           between(time_tb, 30, 59) ~ "maybe",
-          between(time_tb, 61, 1200) ~ "maybe",
+          between(time_tb, 601, 1200) ~ "maybe",
           !between(time_tb, 60, 300) & missing_start ~ "maybe",
           !between(time_tb, 60, 300) & missing_end ~ "maybe",
           .default = "not TB"
