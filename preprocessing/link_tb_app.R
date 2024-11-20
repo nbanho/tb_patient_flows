@@ -903,7 +903,16 @@ server <- function(input, output, session) {
 
     # update ID selection
     update_ids(values)
-    values$select_id <- values$ids_dc[1]
+    if (length(values$ids_dc) == 0) {
+      values$select_id <- values$ids_pc[1]
+      updateRadioButtons(
+        session,
+        inputId = "show_ids",
+        selected = 2
+      )
+    } else {
+      values$select_id <- values$ids_dc[1]
+    }
     update_id_selection(session, values)
 
     # clinic ID count
