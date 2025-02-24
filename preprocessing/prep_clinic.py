@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Path to the Excel file
-file_path = 'data-raw/clinical/complete-clinic-data.xlsx'
+file_path = 'data-raw/clinical/complete-clinic-data edit 17.02.25.xlsx'
 
 # Read the Excel file
 df = pd.read_excel(file_path, dtype=str)
@@ -42,7 +42,7 @@ for col in ['tb_test_res', 'chest_xray_res']:
     df[col] = df[col].str.lower().str.strip()
 df["tb_test_res"] = df["tb_test_res"].replace({
     "not detected": "negative",
-    "1detected(mtb+)": "positive",
+    "detected(mtb+)": "positive",
     "detected": "positive",
     "not submitted": None,
     "3invalid/error": None

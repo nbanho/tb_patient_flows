@@ -19,10 +19,10 @@ plot_wait_time <- 1000 # wait 1s until plot and table are generated
 # search parameters
 time_choices <- c(10, 30, 60, 120, 300, 600, 900)
 dist_choices <- seq(0, 3, .5)
-default_time <- 300
-default_dist <- 1.5
-min_alt_time <- 60
-min_alt_dist <- 1
+default_time <- 10 # 300
+default_dist <- 1 # 1.5
+min_alt_time <- 10 # 60
+min_alt_dist <- 1 # 1
 
 
 #### Building ####
@@ -41,6 +41,10 @@ building_pl <- ggplot() +
   geom_rect(
     aes(xmin = 9.1, xmax = 11.3, ymin = 2.7, ymax = 3.7),
     fill = "yellow", color = NA, alpha = .25
+  ) +
+  geom_rect(
+    aes(xmin = 9.8, xmax = 10.9, ymin = 2.7, ymax = 3.4),
+    fill = "red", color = NA, alpha = .25
   ) +
   geom_rect(
     aes(xmin = 9.1, xmax = 11.3, ymin = 3.71, ymax = 6.25),
@@ -145,6 +149,11 @@ read_tracking <- function(file) {
       links %>% dplyr::select(-new_track_id),
       by = "track_id"
     )
+  }
+
+  # add order
+  if (is.null(tracks$order)) {
+    tracks$order <- "-"
   }
 
   return(tracks)
@@ -362,7 +371,7 @@ update_linkage <- function(values) {
       group_by(track_id, new_track_id) %>%
       slice(1) %>%
       ungroup() %>%
-      dplyr::select(track_id, new_track_id, category),
+      dplyr::select(track_id, new_track_id, category, order),
     file = values$save_file,
     row.names = FALSE
   )
@@ -660,18 +669,25 @@ plot_sequence <- function(values) {
     return(ggplot() +
       theme_classic())
   }
-  track_seq <- values$dat %>%
-    filter(category == "sure" | new_track_id == values$select_id) %>%
+
+  # sure and currently selected track
+  sure_tracks <- values$dat %>%
+    filter(category == "sure" | new_track_id == values$select_id)
+
+  # get time sequence on TB chair
+  track_seq <- sure_tracks %>%
     group_by(new_track_id) %>%
-    mutate(period = cumsum(
-      in_check_tb != lag(in_check_tb, default = first(in_check_tb))
-    )) %>%
+    mutate(
+      tb_chair = between(x, 9.8, 10.9) & between(y, 2.7, 3.4),
+      period = cumsum(tb_chair != lag(tb_chair, default = first(tb_chair)))
+    ) %>%
     ungroup() %>%
-    filter(in_check_tb) %>%
+    filter(tb_chair) %>%
     group_by(new_track_id, period) %>%
     summarise(
       min_time = min(time),
-      max_time = max(time)
+      max_time = max(time),
+      order = order[1]
     ) %>%
     ungroup() %>%
     mutate(
@@ -680,14 +696,80 @@ plot_sequence <- function(values) {
         ~ as.POSIXct(.x / 1000, origin = "1970-01-01")
       ),
       mark = ifelse(new_track_id == values$select_id, "id", "other")
+    )
+
+  # info for tracks on TB chair
+  track_info <- track_seq %>%
+    group_by(new_track_id) %>%
+    summarise(
+      min_time = min(min_time),
+      max_time = max(max_time),
+      order = order[1]
+    )
+
+  # infor for tracks not on TB chair
+  other_tb_id <- setdiff(
+    unique(sure_tracks$new_track_id),
+    unique(track_info$new_track_id)
+  )
+  track_info_other <- sure_tracks %>%
+    filter(new_track_id %in% other_tb_id) %>%
+    group_by(new_track_id) %>%
+    summarise(
+      min_time = min(time),
+      min_tb_time = if_else(any(in_check_tb), min(time[in_check_tb]), NA),
+      order = order[1]
     ) %>%
+    ungroup() %>%
+    mutate(
+      min_time = pmax(min_time, min_tb_time, na.rm = TRUE),
+      max_time = min_time + 5 * 60,
+      across(
+        c(min_time, max_time),
+        ~ as.POSIXct(.x / 1000, origin = "1970-01-01")
+      )
+    )
+
+  # combine infos
+  track_info <- bind_rows(track_info, track_info_other) %>%
     arrange(min_time) %>%
     mutate(new_track_id = factor(
       new_track_id,
       levels = unique(new_track_id)
     )) %>%
     ungroup()
+
+  # create factor in track_seq
+  track_seq <- track_seq %>%
+    mutate(new_track_id = factor(
+      new_track_id,
+      levels = levels(track_info$new_track_id)
+    ))
+
+  # plot sequence
   track_seq_pl <- ggplot() +
+    geom_text(
+      data = track_info,
+      mapping = aes(
+        x = min_time,
+        y = new_track_id,
+        label = new_track_id
+      ),
+      size = 8 / cm(1),
+      nudge_x = -10 * 60,
+      nudge_y = 0
+    ) +
+    geom_text(
+      data = track_info,
+      mapping = aes(
+        x = max_time,
+        y = new_track_id,
+        label = order
+      ),
+      size = 8 / cm(1),
+      nudge_x = 10 * 60,
+      nudge_y = 0
+    ) +
     geom_segment(
       data = track_seq,
       mapping = aes(
@@ -698,19 +780,6 @@ plot_sequence <- function(values) {
         color = mark
       ),
       linewidth = 2
-    ) +
-    geom_text(
-      data = track_seq %>%
-        group_by(new_track_id) %>%
-        slice(1),
-      mapping = aes(
-        x = min_time,
-        y = new_track_id,
-        label = new_track_id
-      ),
-      size = 8 / cm(1),
-      nudge_x = -10 * 60,
-      nudge_y = 0
     )
 
   if (as.Date(values$clin$date[1]) > as.Date("2024-07-20")) {
@@ -847,6 +916,12 @@ ui <- fluidPage(
         )
       ),
       actionButton("finish", "Enter"),
+      br(),
+      br(),
+      textInput(
+        "tb_order", "Order of TB patient?"
+      ),
+      actionButton("order", "Enter"),
       br(),
       br(),
       div(
@@ -1212,6 +1287,26 @@ server <- function(input, output, session) {
     update_ids(values)
     values$select_id <- values$next_id
     update_id_selection(session, values)
+  })
+
+  #### Order TB track ####
+  observeEvent(input$order, {
+    shinyalert(
+      "Success",
+      paste("ID", values$select_id, "is the", input$tb_order, "TB patient."),
+      type = "info",
+      timer = 1000
+    )
+    values$dat$order[values$dat$new_track_id == values$select_id] <- input$tb_order
+    update_linkage(values)
+    update_ids(values)
+    values$select_id <- values$next_id
+    update_id_selection(session, values)
+    updateTextInput(
+      session,
+      inputId = "tb_order",
+      value = as.numeric(input$tb_order) + 1
+    )
   })
 
 
