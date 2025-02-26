@@ -19,8 +19,8 @@ plot_wait_time <- 1000 # wait 1s until plot and table are generated
 # search parameters
 time_choices <- c(10, 30, 60, 120, 300, 600, 900)
 dist_choices <- seq(0, 3, .5)
-default_time <- 10 # 300
-default_dist <- 1 # 1.5
+default_time <- 300
+default_dist <- 1.5
 min_alt_time <- 10 # 60
 min_alt_dist <- 1 # 1
 
