@@ -1,83 +1,73 @@
-import os
 import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import os
+from multiprocessing import Pool
 
-# Define the folder paths
-co2_folder_path = 'data-raw/co2/'
-tracking_folder_path = 'data-clean/tracking/unlinked/'
+def compute_occupancy(date):
+    """
+    Computes the number of close contacts for each track_id in the dataframe.
+    
+    Parameters:
+    date (str): Date in the format '%Y-%m-%d' to identify the file.
+    
+    Returns:
+    pd.DataFrame: DataFrame with 'track_id', 'time_minute', and 'track_id_count' columns.
+    """
+    
+    # Construct file paths
+    base_path = 'data-clean/tracking/'
+    unlinked_file = os.path.join(base_path, 'unlinked', f'{date}.csv')
+    linked_file = os.path.join(base_path, 'linked', f'{date}.csv')
+    
+    # Read the unlinked data
+    df = pd.read_csv(unlinked_file, usecols=['time', 'track_id', 'position_x', 'position_y'])
+    
+    # Check if the linked-tb file exists and merge if it does
+    linked_df = pd.read_csv(linked_file)
+    linked_df.rename(columns={'track_id': 'new_track_id', 'raw_track_id': 'track_id'}, inplace=True)
+    df = pd.merge(df, linked_df, on='track_id')
+    
+    # Drop the old track_id column and rename new_track_id to track_id
+    df.drop(columns=['track_id'], inplace=True)
+    df.rename(columns={'new_track_id': 'track_id'}, inplace=True)
+    
+    # Convert unix timestamp to datetime
+    df['time'] = pd.to_datetime(df['time'], unit='ms')
+    
+    # Round time to the nearest second
+    df['time_second'] = df['time'].dt.floor('S')
+    
+    # Count the number of unique track_id per second
+    second_counts = df.groupby('time_second')['track_id'].nunique().reset_index()
+    second_counts.rename(columns={'track_id': 'track_id_count'}, inplace=True)
+    
+    # Round time to the nearest minute
+    second_counts['time_minute'] = second_counts['time_second'].dt.floor('T')
+    
+    # Compute the average count per minute
+    track_id_counts = second_counts.groupby('time_minute')['track_id_count'].mean().reset_index()
+    
+    return track_id_counts
+    
 
-# List all CSV files in the co2 folder
-co2_csv_files = [f for f in os.listdir(co2_folder_path) if f.endswith('.csv')]
+def process_file(file):
+    date = file.replace('.csv', '')
+    return compute_occupancy(date)
 
-# List all CSV files in the tracking folder to filter dates
-tracking_csv_files = [f for f in os.listdir(tracking_folder_path) if f.endswith('.csv')]
-tracking_dates = [f.split('.')[0] for f in tracking_csv_files]
+if __name__ == '__main__':
+    base_path = 'data-clean/tracking/unlinked'
+    output_file = 'data-clean/tracking/occupancy.csv'
 
-# Initialize an empty list to store DataFrames
-dataframes = []
+    # List all files in the unlinked directory
+    files = [f for f in os.listdir(base_path) if f.endswith('.csv')]
 
-# Initialize a dictionary to store the latest datetime for each device
-latest_datetime = {'Aranet4 272D2': None, 'Aranet4 25247': None}
+    # Use multiprocessing to process files in parallel
+    with Pool(8) as pool:
+        all_data = pool.map(process_file, files)
 
-# Group files by device
-device_files = {'Aranet4 272D2': [], 'Aranet4 25247': []}
-for file in co2_csv_files:
-    if '272D2' in file:
-        device_files['Aranet4 272D2'].append(file)
-    elif '25247' in file:
-        device_files['Aranet4 25247'].append(file)
+    # Combine all DataFrames into a single DataFrame
+    combined_df = pd.concat(all_data, ignore_index=True)
 
-# Sort files by date for each device
-for device in device_files:
-    device_files[device].sort(key=lambda x: pd.to_datetime(x.split('_')[1][:10], format='%Y-%m-%d'))
-
-# Loop through each device and its files
-for device, files in device_files.items():
-    for file in files:
-        print(file)
-        
-        # Read the CSV file into a DataFrame
-        df = pd.read_csv(os.path.join(co2_folder_path, file))
-        
-        # Parse the datetime column with multiple formats
-        datetime_col = df.columns[0]
-        try:
-            df['datetime'] = pd.to_datetime(df[datetime_col], format='%d/%m/%Y %I:%M:%S %p')
-        except ValueError:
-            try:
-                df['datetime'] = pd.to_datetime(df[datetime_col], format='%d/%m/%Y %H:%M:%S')
-            except ValueError:
-                df['datetime'] = pd.to_datetime(df[datetime_col], format='%d.%m.%Y %H:%M')
-        
-        # Filter the data between 6am and 6pm
-        df = df[(df['datetime'].dt.time >= pd.to_datetime('06:00:00').time()) & 
-                (df['datetime'].dt.time <= pd.to_datetime('18:00:00').time())]
-        
-        # Remove rows with datetime smaller than the latest datetime for the device
-        if latest_datetime[device] is not None:
-            df = df[df['datetime'] > latest_datetime[device]]
-        
-        # Update the latest datetime for the device
-        if not df.empty:
-            latest_datetime[device] = df['datetime'].max()
-        
-        # Add a column for the device
-        df['device'] = device
-        
-        # Subset
-        df = df[['device', 'datetime', 'Carbon dioxide(ppm)', 'Temperature(°C)', 'Relative humidity(%)', 'Atmospheric pressure(hPa)']]
-        
-        # Append the DataFrame to the list
-        dataframes.append(df)
-
-# Combine all DataFrames into a single DataFrame
-combined_df = pd.concat(dataframes, ignore_index=True)
-
-# Filter dates based on the tracking CSV files
-combined_df['date'] = combined_df['datetime'].dt.strftime('%Y-%m-%d')
-combined_df = combined_df[combined_df['date'].isin(tracking_dates)]
-
-# Drop the temporary 'date' column
-combined_df = combined_df.drop(columns=['date'])
-
-# Save the combined DataFrame to a CSV file
-combined_df.to_csv('data-clean/environmental/co2-temp-humidity.csv', index=False, header=True)
+    # Save the combined DataFrame to a CSV file
+    combined_df.to_csv(output_file, index=False, header=True)

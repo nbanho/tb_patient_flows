@@ -23,19 +23,14 @@ def compute_close_contacts(date, cc_dist, cc_time, min_time):
     base_path = 'data-clean/tracking/'
     unlinked_file = os.path.join(base_path, 'unlinked', f'{date}.csv')
     linked_file = os.path.join(base_path, 'linked', f'{date}.csv')
-    linked_tb_file = os.path.join(base_path, 'linked-tb', f'{date}.csv')
     
     # Read the unlinked data
     df = pd.read_csv(unlinked_file, usecols=['time', 'track_id', 'position_x', 'position_y'])
     
     # Check if the linked-tb file exists and merge if it does
-    if os.path.exists(linked_tb_file):
-        linked_tb_df = pd.read_csv(linked_tb_file)
-        df = pd.merge(df, linked_tb_df, on='track_id')
-    else: # otherwise merge automatic links
-        linked_df = pd.read_csv(linked_file)
-        linked_df.rename(columns={'track_id': 'new_track_id', 'raw_track_id': 'track_id'}, inplace=True)
-        df = pd.merge(df, linked_df, on='track_id')
+    linked_df = pd.read_csv(linked_file)
+    linked_df.rename(columns={'track_id': 'new_track_id', 'raw_track_id': 'track_id'}, inplace=True)
+    df = pd.merge(df, linked_df, on='track_id')
     
     # Drop the old track_id column and rename new_track_id to track_id
     df.drop(columns=['track_id'], inplace=True)
@@ -103,7 +98,7 @@ def compute_close_contacts(date, cc_dist, cc_time, min_time):
 
 def process_file(file):
     date = file.replace('.csv', '')
-    return compute_close_contacts(date, cc_dist=1.0, cc_time=60, min_time=300)
+    return compute_close_contacts(date, cc_dist=1.0, cc_time=60, min_time=60)
 
 if __name__ == '__main__':
     base_path = 'data-clean/tracking/unlinked'
