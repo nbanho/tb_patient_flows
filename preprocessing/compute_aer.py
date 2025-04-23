@@ -5,11 +5,21 @@ from scipy.optimize import minimize
 from building import *
 from concurrent.futures import ProcessPoolExecutor
 
-# data
-combined_file_path = 'data-clean/environmental/co2-occupancy.csv'
-co2 = pd.read_csv(combined_file_path)
+# co2 data
+co2 = pd.read_csv('data-clean/environmental/co2-temp-humidity.csv')
 co2['datetime'] = pd.to_datetime(co2['datetime'])
 co2['date'] = co2['datetime'].dt.date
+co2['datetime'] = co2['datetime'].dt.round('T')
+co2 = co2[['device', 'date', 'datetime', 'co2', 'co2_outdoor']]
+
+# occupancy data
+occupancy = pd.read_csv('data-clean/tracking/occupancy.csv')
+occupancy['time_minute'] = pd.to_datetime(occupancy['time_minute'])
+occupancy.rename(columns={'track_id_count': 'no_people'}, inplace=True)
+occupancy.rename(columns={'time_minute': 'datetime'}, inplace=True)
+
+# merge co2 and occupancy data
+df = pd.merge(co2, occupancy, on='datetime', how='left')
 
 # steady state model
 def steady_state_model(n, G, V, Cs, Cr):
@@ -26,7 +36,7 @@ def steady_state_model(n, G, V, Cs, Cr):
     Returns:
     float: Air change rate (1/h)
     """
-    return 6 * 10**4 * n * G / (V * (Cs - Cr))
+    return 6 * 10**4 * n * G / (V * (Cs - Cr)) 
 
 # transient mass balance model
 def transient_mass_balance_model(A, C, n, V, Cr, G, dt):
@@ -100,11 +110,13 @@ def optimize_parameters(C, n, V, G, dt, A_init, Cr_init, A_bounds, Cr_bounds):
 results = []
 
 # Group the co2 DataFrame by device and date
-grouped_co2 = co2.groupby(['device', 'date'])
+grouped_df = df.groupby(['device', 'date'])
 
 # Loop through each group (device and date)
-for (device, date), group in grouped_co2:
+for (device, date), group in grouped_df:
     C = group['co2'].tolist()
+    Co = group['co2_outdoor'].tolist()[0]
+    Co = min(min(C), Co) + 1
     n = group['no_people'].tolist()
     V = vol  # Volume of waiting room m^3
     G = 0.004 * 60  # Assumed CO2 generation rate per person in L/h
@@ -115,18 +127,20 @@ for (device, date), group in grouped_co2:
     n = n[1:-1]  # Remove the first (NA) and last value
 
     A_init = 1  # Initial value for A
-    Cr_init = 350  # Initial value for Cr
+    Cr_init = Co  # Initial value for Cr
+    Cr_lower = min(300, Co)
+    Cr_upper = min(500, Co)
     A_bounds = (0.1, 100.0)  # Bounds for A
-    Cr_bounds = (300, 600)  # Bounds for Cr
+    Cr_bounds = (Cr_lower, Cr_upper)  # Bounds for Cr
     
     # transient mass balance model
     optimized_params = optimize_parameters(C, n, V, G, dt, A_init, Cr_init, A_bounds, Cr_bounds)
     
     # steady state model
-    A_ssm = steady_state_model(max(n), G, vol, max(C), min(C))
+    A_ssm = steady_state_model(max(n), G, vol, max(C), Co)
     
     # append results
-    results.append({'device': device, 'date': date, 'aer_tmb': optimized_params['A'], 'Cr_tmb': optimized_params['Cr'], 'aer_ssm': A_ssm, 'Cr_ssm': min(C)})
+    results.append({'device': device, 'date': date, 'aer_tmb': optimized_params['A'], 'Cr_tmb': optimized_params['Cr'], 'aer_ssm': A_ssm, 'Cr_ssm': Co})
 
 # Convert the results to a DataFrame
 results_df = pd.DataFrame(results)
@@ -136,5 +150,3 @@ results_df = results_df.sort_values(by=['device', 'date'])
 
 # Save the results to a CSV file without index but with header
 results_df.to_csv('data-clean/environmental/air-exchange-rate.csv', index=False, header=True)
-
-print(results_df)

@@ -48,10 +48,6 @@ for device, files in device_files.items():
             except ValueError:
                 df['datetime'] = pd.to_datetime(df[datetime_col], format='%d.%m.%Y %H:%M')
         
-        # Filter the data between 6am and 6pm
-        df = df[(df['datetime'].dt.time >= pd.to_datetime('06:00:00').time()) & 
-                (df['datetime'].dt.time <= pd.to_datetime('18:00:00').time())]
-        
         # Remove rows with datetime smaller than the latest datetime for the device
         if latest_datetime[device] is not None:
             df = df[df['datetime'] > latest_datetime[device]]
@@ -71,6 +67,16 @@ for device, files in device_files.items():
 
 # Combine all DataFrames into a single DataFrame
 combined_df = pd.concat(dataframes, ignore_index=True)
+
+# Rename columns for consistency
+combined_df.columns = ['device', 'datetime', 'co2', 'temp', 'humidity', 'pressure']
+
+# Compute the outdoor CO2 level as the bottom 5% of the CO2 levels per day and device
+combined_df['co2_outdoor'] = combined_df.groupby(['device', combined_df['datetime'].dt.date])['co2'].transform(lambda x: x.quantile(0.05))
+
+# Filter the data between 6am and 6pm
+combined_df = combined_df[(combined_df['datetime'].dt.time >= pd.to_datetime('06:00:00').time()) & 
+                          (combined_df['datetime'].dt.time <= pd.to_datetime('18:00:00').time())]
 
 # Filter dates based on the tracking CSV files
 combined_df['date'] = combined_df['datetime'].dt.strftime('%Y-%m-%d')
