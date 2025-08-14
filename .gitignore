@@ -1,0 +1,12 @@
+data-clean/tracking/unlinked/*.csv
+.DS_Store
+doc/
+data-raw/
+data-check/
+data-clean/tracking/non-tb-positions/
+data-clean/tracking/tb-positions/
+results/
+modelling-results/
+data-clean/building/
+data-clean/assumptions/
+__pycache__/

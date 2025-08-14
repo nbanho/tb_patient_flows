@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from building import *
+from modelling.create_building_mask import *
 from concurrent.futures import ProcessPoolExecutor
 
 #### Combine tracking and CO2 data ####
