@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import math
 from scipy.optimize import minimize
-from building import *
 from concurrent.futures import ProcessPoolExecutor
 
 # co2 data
@@ -49,7 +48,7 @@ def transient_mass_balance_model(A, C, n, V, Cr, G, dt):
     n (int): Number of people in the space
     V (float): Volume of the space (m^3)
     Cr (float): Outdoor CO2 level (ppm)
-    G (float): CO2 generation rate per person (L/h)
+    G (float): CO2 generation rate per person (L/min)
     dt (float): Timestep (hours)
 
     Returns:
@@ -70,7 +69,7 @@ def residual_sum_of_squares(params, C, n, V, G, dt):
     C (list): List of CO2 levels (ppm)
     n (list): List of number of people in the space
     V (float): Volume of the space (m^3)
-    G (float): CO2 generation rate per person (L/h)
+    G (float): CO2 generation rate per person (L/min)
     dt (float): Timestep (hours)
 
     Returns:
@@ -92,7 +91,7 @@ def optimize_parameters(C, n, V, G, dt, A_init, Cr_init, A_bounds, Cr_bounds):
     C (list): List of CO2 levels (ppm)
     n (list): List of number of people in the space
     V (float): Volume of the space (m^3)
-    G (float): CO2 generation rate per person (L/h)
+    G (float): CO2 generation rate per person (L/min)
     dt (float): Timestep (hours)
     A_init (float): Initial value for A
     Cr_init (float): Initial value for Cr
@@ -118,15 +117,15 @@ for (device, date), group in grouped_df:
     Co = group['co2_outdoor'].tolist()[0]
     Co = min(min(C), Co) + 1
     n = group['no_people'].tolist()
-    V = vol  # Volume of waiting room m^3
-    G = 0.004 * 60  # Assumed CO2 generation rate per person in L/h
+    V = 1178.7  # Volume of waiting area in m^3
+    G = 0.004 * 60  # Assumed CO2 generation rate per person in L/min
     dt = 5 / 60  # Timestep in hours (should be 5 minutes)
     
     # Ensure C and n are of the same length by taking the lead of C
     C = C[2:]  # Remove the first two values
     n = n[1:-1]  # Remove the first (NA) and last value
 
-    A_init = 1  # Initial value for A
+    A_init = 5  # Initial value for A
     Cr_init = Co  # Initial value for Cr
     Cr_lower = min(300, Co)
     Cr_upper = min(500, Co)
@@ -137,7 +136,7 @@ for (device, date), group in grouped_df:
     optimized_params = optimize_parameters(C, n, V, G, dt, A_init, Cr_init, A_bounds, Cr_bounds)
     
     # steady state model
-    A_ssm = steady_state_model(max(n), G, vol, max(C), Co)
+    A_ssm = steady_state_model(max(n), G, V, max(C), Co)
     
     # append results
     results.append({'device': device, 'date': date, 'aer_tmb': optimized_params['A'], 'Cr_tmb': optimized_params['Cr'], 'aer_ssm': A_ssm, 'Cr_ssm': Co})
