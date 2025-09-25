@@ -1,0 +1,663 @@
+---
+title: "TB Patient Flows Modelling"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(lubridate)
+
+library(emmeans)
+library(gamlss)
+
+source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotting.R")
+source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
+```
+
+## Risk of infection
+
+```{r check convergence}
+# files
+sim_files <- list.files(
+  "modelling-results/uncertain/2024-06-26/",
+  pattern = ".csv$", full.names = TRUE
+)
+
+# load data
+sim_data <- map_dfr(sim_files, function(file) {
+  sim_num <- str_extract(basename(file), "(?<=_sim_)\\d+")
+  df <- read_csv(file)
+  df$sim <- as.integer(sim_num)
+  df
+})
+
+# compute average risk per simulation
+sim_avg <- sim_data %>%
+  group_by(sim) %>%
+  summarise(risk = sum(risk_diffusion) / sum(duration) * 3600 * 100) %>%
+  ungroup()
+
+# plot convergence
+sim_avg %>%
+  ggplot(aes(x = sim, y = risk)) +
+  geom_point()
+cumquantile <- function(x, p = .5) {
+  purrr::map_dbl(seq_along(x), ~ quantile(x[1:.x], p))
+}
+sim_avg %>%
+  arrange(sim) %>%
+  mutate(
+    q50 = cumquantile(risk, .5),
+    q20 = cumquantile(risk, .2),
+    q80 = cumquantile(risk, .8)
+  ) %>%
+  ggplot(aes(x = sim)) +
+  geom_line(aes(y = q50)) +
+  geom_line(aes(y = q20), linetype = "dashed", color = "blue") +
+  geom_line(aes(y = q80), linetype = "dashed", color = "blue")
+```
+
+```{r load data}
+
+```
+
+## Intervention effects
+
+### Default analysis
+
+```{r load data}
+# modelling results
+data_dir <- "modelling-results/fixed/"
+folders <- list.dirs(data_dir, recursive = FALSE, full.names = TRUE)
+mr <- map_dfr(folders, function(folder) {
+  date_val <- basename(folder)
+  csv_file <- list.files(folder, pattern = "\\.csv$", full.names = TRUE)
+  df <- read_csv(csv_file)
+  df$date <- as.Date(date_val)
+  df
+})
+
+# intervention mapping
+interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
+  mutate(
+    date = as.Date(date),
+    study_phase = factor(
+      study_phase,
+      levels = c("Baseline", "First intervention", "Second intervention")
+    )
+  )
+mr <- mr %>%
+  left_join(interventions, by = "date") %>%
+  mutate(
+    wkdy = factor(weekdays(as.Date(date)),
+      levels = c(
+        "Monday", "Tuesday", "Wednesday",
+        "Thursday", "Friday", "Saturday", "Sunday"
+      ), ordered = FALSE
+    )
+  )
+```
+
+```{r process data}
+# inspect average risks
+mr %>%
+  mutate(risk_diffusion = risk_diffusion * duration / 3600 / 100) %>%
+  group_by(date, wkdy, study_phase) %>%
+  summarise(
+    risk_diffusion = sum(risk_diffusion) / sum(duration) * 3600 * 100,
+  ) %>%
+  ungroup() %>%
+  mutate(date = as.Date(date)) %>%
+  ggplot(aes(x = date, y = risk_diffusion, color = study_phase)) +
+  geom_point() +
+  scale_x_date(date_breaks = "2 weeks", date_labels = "%d %b")
+
+# compute risk ratio
+mrr <- mr %>%
+  group_by(date, wkdy, study_phase) %>%
+  summarise(
+    risk_diffusion = sum(risk_diffusion),
+    risk_mixed = sum(risk_mixed),
+    duration = sum(duration)
+  ) %>%
+  ungroup() %>%
+  mutate(rr = (risk_diffusion / risk_mixed) / duration * 3600 * 100)
+
+# inspect risk difference
+mrr %>%
+  mutate(date = as.Date(date)) %>%
+  ggplot(aes(x = date, y = rr, color = study_phase)) +
+  geom_point()
+```
+
+```{r estimate difference}
+# unweighted linear model
+rr_lm <- lm(rr ~ study_phase + wkdy, data = mrr)
+summary(rr_lm)
+
+# estimated rr
+rr_eem <- data.frame(emmeans(rr_lm, ~study_phase)) %>%
+  mutate(study_phase = factor(
+    study_phase,
+    levels = c("Baseline", "First intervention", "Second intervention")
+  )) %>%
+  left_join(interventions, by = "study_phase") %>%
+  mutate(
+    phase_group = case_when(
+      study_phase == "Baseline" & date < min(interventions$date[interventions$study_phase == "First intervention"]) ~ "Baseline (pre-intervention)",
+      study_phase == "Baseline" & date >= max(interventions$date[interventions$study_phase == "First intervention"]) ~ "Baseline (post-intervention)",
+      study_phase == "First intervention" ~ "First intervention",
+      study_phase == "Second intervention" ~ "Second intervention"
+    ),
+    phase_group = factor(
+      phase_group,
+      levels = c(
+        "Baseline (pre-intervention)",
+        "Baseline (post-intervention)",
+        "First intervention",
+        "Second intervention"
+      )
+    )
+  ) %>%
+  arrange(date) %>%
+  group_by(phase_group) %>%
+  mutate(date = if_else(date == max(date), date + 1, date)) %>%
+  ungroup() %>%
+  mutate(date = if_else(date == min(date), date - 1, date))
+
+# estimated changes
+rr_changes <- data.frame(
+  study_phase = factor(
+    c("First intervention", "Second intervention"),
+    levels = c("Baseline", "First intervention", "Second intervention")
+  ),
+  mean = coef(rr_lm)[2:3],
+  lower = confint(rr_lm)[2:3, 1],
+  upper = confint(rr_lm)[2:3, 2]
+) %>%
+  mutate(
+    label = paste0(
+      "**Reduction:** ",
+      "**", round_k(mean * 100, 1), "%**",
+      "<br>(95%-CI ",
+      round_k(lower * 100, 1),
+      " to ",
+      round_k(upper * 100, 1),
+      ")"
+    )
+  ) %>%
+  left_join(
+    interventions %>%
+      filter(study_phase %in% c("First intervention", "Second intervention")) %>%
+      group_by(study_phase) %>%
+      summarise(date = median(date)) %>%
+      ungroup(),
+    by = "study_phase"
+  ) %>%
+  left_join(
+    rr_eem %>%
+      filter(study_phase %in% c("First intervention", "Second intervention")) %>%
+      group_by(study_phase) %>%
+      slice(1) %>%
+      ungroup() %>%
+      dplyr::select(-date),
+    by = "study_phase"
+  )
+
+# plot
+mrr_pl <- mrr %>%
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = rr, color = study_phase)) +
+  geom_line(
+    data = rr_eem,
+    mapping = aes(y = emmean, color = study_phase, group = phase_group)
+  ) +
+  geom_ribbon(
+    data = rr_eem,
+    mapping = aes(
+      ymin = lower.CL, ymax = upper.CL,
+      fill = study_phase, group = phase_group
+    ),
+    alpha = 0.2, color = NA
+  ) +
+  geom_richtext(
+    data = rr_changes,
+    mapping = aes(y = upper.CL, label = label, color = study_phase),
+    vjust = -.1, size = 8 / cm(1), show.legend = FALSE,
+    fill = NA
+  ) +
+  labs(
+    y = "Risk ratio (Close-proximity model vs. Well-mixed model)",
+    x = "Date",
+    color = "Study phase",
+    fill = "Study phase"
+  ) +
+  scale_colour_paletteer_d(
+    "nationalparkcolors::CraterLake",
+    labels = c("No intervention", "First intervention", "Second intervention")
+  ) +
+  scale_fill_paletteer_d(
+    "nationalparkcolors::CraterLake",
+    labels = c("No intervention", "First intervention", "Second intervention")
+  ) +
+  scale_x_date(expand = c(0, 0)) +
+  scale_y_continuous(
+    breaks = scales::breaks_width(0.05),
+    limits = c(0, NA),
+    expand = expansion(mult = c(0, 0.01))
+  ) +
+  theme_custom() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    axis.title.x = element_blank()
+  )
+save_plot(
+  mrr_pl, "results/modelling-intervention-effects.png",
+  w = 17, h = 14
+)
+```
+
+
+## Association analysis
+
+```{r load infection risk and covariates}
+# modelling results
+data_dir_var <- "modelling-results/variable_aer/"
+folders_var <- list.dirs(data_dir_var, recursive = FALSE, full.names = TRUE)
+mr_var <- map_dfr(folders_var, function(folder) {
+  date_val <- basename(folder)
+  csv_file <- list.files(folder, pattern = "\\.csv$", full.names = TRUE)
+  df <- read_csv(csv_file)
+  df$date <- as.Date(date_val)
+  df
+})
+
+# add interventions
+mr_var <- mr_var %>%
+  left_join(interventions, by = "date")
+
+# add covariates
+files_cov <- list.files("data-clean/tracking/features/", full.names = TRUE)
+covars <- map_dfr(files_cov, read_csv) %>%
+  group_by(date) %>%
+  mutate(sum_hcw = sum(healthcare_worker, na.rm = TRUE)) %>%
+  mutate(healthcare_worker = if_else(
+    sum_hcw == 0, NA, healthcare_worker
+  )) %>%
+  ungroup() %>%
+  dplyr::select(-sum_hcw) %>%
+  mutate(
+    across(
+      starts_with("hour_"),
+      ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))
+    ),
+    weekday = factor(weekdays(as.Date(date)),
+      levels = c(
+        "Monday", "Tuesday", "Wednesday",
+        "Thursday", "Friday", "Saturday", "Sunday"
+      )
+    )
+  )
+mr_var <- mr_var %>%
+  left_join(covars, by = c("date", "new_track_id"))
+```
+
+```{r regression models}
+#' TODO:
+#' - relative factor contribution
+
+# transformations
+mr_var <- mr_var %>%
+  mutate(
+    log_risk_diffusion = log1p(risk_diffusion),
+    risk_diffusion_yn = if_else(risk_diffusion > 0, 1, 0),
+    log_proximity_time = log1p(close_proximity_time_1.0m),
+    sqrt_proximity_contacts = sqrt(close_proximity_contacts_1.0m_60s),
+    log_visit_time = log1p(time_spent_seconds)
+  )
+
+hist(mr_var$log_proximity_time)
+hist(mr_var$sqrt_proximity_contacts)
+hist(mr_var$log_visit_time)
+
+# formulas
+outcome <- c("risk_diffusion_yn", "log_risk_diffusion")
+covariates <- list(
+  intervention = c("study_phase"),
+  weekday = c("weekday"),
+  daytime = c(
+    "hour_6", "hour_7", "hour_8", "hour_9", "hour_10", "hour_11",
+    "hour_13", "hour_14", "hour_15", "hour_16", "hour_17"
+  ),
+  aer = c("aer"),
+  exposure = c("log_visit_time"),
+  proximity = c("log_proximity_time", "sqrt_proximity_contacts")
+)
+form_logit <- as.formula(
+  paste(
+    outcome[1],
+    "~",
+    paste(unlist(covariates), collapse = " + ")
+  )
+)
+form_lm <- as.formula(
+  paste(
+    outcome[2],
+    "~",
+    paste(unlist(covariates), collapse = " + ")
+  )
+)
+
+# logit model if any risk vs no risk
+cov_logit <- glm(
+  form_logit,
+  family = binomial(link = "logit"),
+  data = mr_var
+)
+summary(cov_logit)
+
+# linear model if log risk
+cov_lm <- lm(
+  form_lm,
+  data = mr_var %>%
+    filter(risk_diffusion > 0)
+)
+summary(cov_lm)
+```
+
+
+```{r prediction intervals logit}
+# default study time grid
+fct_grid <- expand.grid(
+  study_phase = "Baseline",
+  weekday = levels(mr_var$weekday),
+  hour = 6:17
+)
+for (h in 6:17) {
+  fct_grid[[paste0("hour_", h)]] <- if_else(fct_grid$hour == h, "Yes", "No")
+}
+fct_grid$hour <- NULL
+fct_grid <- fct_grid %>%
+  mutate(across(everything(), as.factor))
+
+# default visitor and conditions
+visit_cond <- mr_var %>%
+  filter(time_spent_seconds > 300) %>%
+  mutate(
+    number = close_proximity_contacts_1.0m_60s / time_spent_seconds,
+    time = close_proximity_time_1.0m / time_spent_seconds
+  ) %>%
+  summarise(
+    across(
+      c(number, time),
+      list(
+        low = ~ quantile(.x, 0.05, na.rm = TRUE),
+        median = ~ quantile(.x, 0.5, na.rm = TRUE),
+        high = ~ quantile(.x, 0.95, na.rm = TRUE)
+      ),
+      .names = "{col}_{fn}"
+    )
+  ) %>%
+  pivot_longer(
+    everything(),
+    names_to = c(".value", "quantile"),
+    names_sep = "_",
+  ) %>%
+  mutate(
+    quantile = factor(quantile, levels = c("low", "median", "high")),
+    time_spent_seconds = 3600,
+    proximity_contacts = number * time_spent_seconds,
+    proximity_time = time * time_spent_seconds,
+    log_visit_time = log1p(time_spent_seconds),
+    sqrt_proximity_contacts = sqrt(proximity_contacts),
+    log_proximity_time = log1p(proximity_time)
+  )
+
+# study time effects
+default_grid <- fct_grid %>%
+  mutate(aer = 7.8) %>%
+  bind_cols(
+    visit_cond %>%
+      filter(quantile == "median") %>%
+      dplyr::select(
+        log_visit_time, sqrt_proximity_contacts,
+        log_proximity_time
+      )
+  )
+
+# get prediction intervals
+get_pi <- function(model, grid = default_grid) {
+  predict(
+    model,
+    newdata = grid,
+    respone = "link", se.fit = TRUE
+  ) %>%
+    as.data.frame() %>%
+    dplyr::select(-residual.scale) %>%
+    bind_cols(grid) %>%
+    mutate(
+      lower = fit - 1.96 * se.fit,
+      upper = fit + 1.96 * se.fit
+    ) %>%
+    ungroup() %>%
+    mutate(across(c(fit, lower, upper), plogis))
+}
+
+# prediction intervals for weekday and daytime
+wkdy_order <- rev(sort(
+  coef(cov_logit)[grep("weekday", names(coef(cov_logit)))]
+))
+wkdy_order <- c("Monday", gsub("weekday", "", names(wkdy_order)))
+
+logit_pi_time <- get_pi(cov_logit, default_grid) %>%
+  mutate(
+    weekday = factor(
+      substr(as.character(weekday), 1, 3),
+      levels = substr(wkdy_order, 1, 3)
+    )
+  ) %>%
+  pivot_longer(
+    cols = hour_6:hour_17,
+    names_to = "hour_name",
+    values_to = "val"
+  ) %>%
+  filter(val == "Yes") %>%
+  mutate(hour = as.integer(str_remove(hour_name, "hour_"))) %>%
+  select(-hour_name, -val)
+
+logit_time_pl <- logit_pi_time %>%
+  ggplot(aes(x = hour, y = fit, color = weekday, group = weekday)) +
+  geom_line() +
+  geom_point(shape = 23, fill = "white") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  scale_y_continuous(
+    labels = function(x) x * 100,
+    limits = c(0, 1), expand = c(0, 0)
+  ) +
+  scale_colour_paletteer_d("rcartocolor::BluYl") +
+  scale_x_continuous(breaks = 6:17) +
+  labs(
+    title = "a",
+    x = "Daytime (hour)",
+    y = "Exposure probability (%)"
+  ) +
+  theme_custom() +
+  theme(
+    plot.title.position = "plot",
+    plot.subtitle = element_blank(),
+    legend.title = element_blank(),
+    legend.key.width = unit(.75, "lines"),
+    legend.position = c(1, 1),
+    legend.justification = c(1, 1),
+    legend.key.height = unit(1, "lines"),
+  ) +
+  guides(color = guide_legend(ncol = 1))
+
+# prediction intervals for air exchange rate
+aers <- mr_var %>%
+  group_by(date) %>%
+  slice(1) %>%
+  ungroup() %>%
+  pull(aer) %>%
+  sort() %>%
+  round(1)
+aer_grid <- map_dfr(aers, function(a) {
+  mutate(default_grid, aer = a)
+})
+
+logit_pi_aer <- get_pi(cov_logit, aer_grid) %>%
+  group_by(aer) %>%
+  summarise(across(c(fit, lower, upper), mean)) %>%
+  ungroup()
+
+logit_aer_pl <- logit_pi_aer %>%
+  ggplot(aes(x = aer, y = fit)) +
+  geom_line(group = 1) +
+  geom_point(shape = 23, fill = "white") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  scale_y_continuous(
+    labels = function(x) x * 100,
+    limits = c(0, 1), expand = c(0, 0)
+  ) +
+  scale_colour_paletteer_d("rcartocolor::BluYl") +
+  scale_x_continuous(
+    breaks = seq(0, 32, by = 4),
+    minor_breaks = aers,
+    limits = c(1, 32), expand = c(0, 0)
+  ) +
+  labs(
+    title = "b",
+    x = "Air exchange rate (h<sup>-1</sup>)",
+    y = "Exposure probability (%)"
+  ) +
+  theme_custom() +
+  theme(
+    plot.title.position = "plot",
+    legend.title = element_blank(),
+    axis.title.x = element_markdown()
+  )
+
+# prediction intervals for contact
+contact_grid <- expand.grid(
+  time_spent_seconds = c(1800, 3600, 7200),
+  number = visit_cond$number,
+  time = visit_cond$time
+) %>%
+  mutate(
+    proximity_contacts = number * time_spent_seconds,
+    proximity_time = time * time_spent_seconds,
+    log_visit_time = log1p(time_spent_seconds),
+    sqrt_proximity_contacts = sqrt(proximity_contacts),
+    log_proximity_time = log1p(proximity_time)
+  ) %>%
+  dplyr::select(
+    log_visit_time,
+    sqrt_proximity_contacts,
+    log_proximity_time
+  )
+contact_grid <- map_dfr(1:nrow(contact_grid), function(i) {
+  bind_cols(mutate(fct_grid, aer = 7.8), contact_grid[i, ])
+})
+
+logit_pi_contact <- get_pi(cov_logit, contact_grid) %>%
+  group_by(log_visit_time, sqrt_proximity_contacts, log_proximity_time) %>%
+  summarise(across(c(fit, lower, upper), mean)) %>%
+  ungroup() %>%
+  mutate(
+    log_visit_time = case_when(
+      log_visit_time == min(log_visit_time) ~ "30min",
+      log_visit_time == max(log_visit_time) ~ "120min",
+      .default = "60min"
+    ),
+    across(
+      c(log_visit_time, sqrt_proximity_contacts, log_proximity_time),
+      factor
+    ),
+    log_visit_time = factor(
+      log_visit_time,
+      levels = c(
+        "30min",
+        "60min",
+        "120min"
+      )
+    )
+  ) %>%
+  group_by(log_visit_time, sqrt_proximity_contacts) %>%
+  arrange(log_proximity_time) %>%
+  mutate(
+    log_proximity_time = factor(
+      c("Low", "Median", "High"),
+      levels = c("Low", "Median", "High")
+    )
+  ) %>%
+  ungroup() %>%
+  group_by(log_visit_time, log_proximity_time) %>%
+  arrange(sqrt_proximity_contacts) %>%
+  mutate(
+    sqrt_proximity_contacts = factor(
+      c("Low", "Median", "High"),
+      levels = c("Low", "Median", "High")
+    )
+  ) %>%
+  ungroup()
+
+logit_contact_pl <- logit_pi_contact %>%
+  ggplot(aes(
+    x = log_proximity_time, y = fit,
+    color = sqrt_proximity_contacts, group = sqrt_proximity_contacts
+  )) +
+  facet_wrap(~log_visit_time) +
+  geom_line() +
+  geom_point(shape = 23, fill = "white") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  scale_y_continuous(
+    labels = function(x) x * 100,
+    limits = c(0, 1), expand = c(0, 0)
+  ) +
+  scale_colour_manual(
+    values = paletteer_d("NineteenEightyR::miami2")[c(1, 3, 5)],
+    labels = c("5th", "50th", "95th")
+  ) +
+  scale_x_discrete(labels = c("5th", "50th", "95th")) +
+  labs(
+    title = "c",
+    subtitle = "Visit duration",
+    x = "Close-proximity time (pctl.)",
+    y = "Predicted probability of exposure (%)",
+    color = "Contacts (pctl.)"
+  ) +
+  theme_custom() +
+  theme(
+    plot.title.position = "plot",
+    plot.subtitle = element_text(hjust = 0.5),
+    strip.text = element_text(face = 1),
+    panel.spacing.x = unit(.5, "lines"),
+    legend.key.width = unit(1, "lines"),
+    legend.position = c(1, 1),
+    legend.justification = c(1, 1),
+    axis.title.y = element_blank()
+  ) +
+  guides(color = guide_legend(ncol = 1, reverse = TRUE))
+
+# combine plots
+logit_pl <- grid.arrange(
+  grid.arrange(
+    logit_time_pl, logit_aer_pl,
+    ncol = 1,
+    nrow = 2,
+    heights = c(1, 1)
+  ),
+  logit_contact_pl,
+  ncol = 2,
+  nrow = 1,
+  widths = c(1, 1)
+)
+
+save_plot(
+  logit_pl, "results/modelling-association-logit.png",
+  w = 17, h = 14
+)
+``` 
