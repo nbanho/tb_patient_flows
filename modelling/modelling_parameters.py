@@ -13,7 +13,7 @@ n_samples = 1000
 # Quanta generation rates
 mean_waiting = 0.07162337
 sigma_waiting = 2.99399
-mean_walking = 0.2058702
+mean_walking = 1.035785
 sigma_walking = 2.99252
 
 # Load and combine all CSV files
