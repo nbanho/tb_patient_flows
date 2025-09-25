@@ -7,6 +7,15 @@ import argparse
 import spatiotemporal_diffusion as spd
 import compute_risk_of_infection as cri
 import warnings
+import concurrent.futures
+from functools import partial
+
+linked_tb_path = 'data-clean/tracking/linked-tb/'
+dates = [
+    file.replace('.csv', '') 
+    for file in os.listdir(linked_tb_path) 
+    if file.endswith('.csv')
+]
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run risk model simulation.")
@@ -21,7 +30,23 @@ def parse_args():
     parser.add_argument('--cell_size', type=float, default=0.5, help='Size of the cell (m)')
     parser.add_argument('--cell_height', type=float, default=3.0, help='Height of the cell (m)')
     parser.add_argument('--space_vol', type=float, default=None, help='Volume of the space (m3)')
+    parser.add_argument('--cores', type=int, default=4, help='Number of cores to use for parallel processing of multiple dates.')
     return parser.parse_args()
+
+def run_for_date(date, args, sim, quanta_rate, breath_rate):
+    model_risk(
+        name=args.name,
+        date=date,
+        sim=sim,
+        aer=args.aer,
+        inact_rate=args.inact_rate,
+        settl_rate=args.settl_rate,
+        quanta_rate=quanta_rate,
+        breath_rate=breath_rate,
+        cell_size=args.cell_size,
+        cell_height=args.cell_height,
+        space_vol=args.space_vol
+    )
 
 def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None, quanta_rate=None, breath_rate=None, cell_size=0.5, cell_height=3.0, space_vol=None):
     """
@@ -40,6 +65,7 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
         cell_height (float): Height of the cell. Cannot be empty.
         space_vol (float, optional): Volume of the space. Cannot be empty.
     """
+    print(f"Starting modelling for '{name}' on date '{date}'...")
     # Create the directory to save the results
     results_dir = os.path.join('modelling-results', name, date)
     os.makedirs(results_dir, exist_ok=True)
@@ -206,17 +232,25 @@ if __name__ == "__main__":
     sim = ast.literal_eval(args.sim)
     quanta_rate = ast.literal_eval(args.quanta_rate) if args.quanta_rate is not None else None
     breath_rate = ast.literal_eval(args.breath_rate) if args.breath_rate is not None else None
-    model_risk(
-        name=args.name,
-        date=args.date,
-        sim=sim,
-        aer=args.aer,
-        inact_rate=args.inact_rate,
-        settl_rate=args.settl_rate,
-        quanta_rate=quanta_rate,
-        breath_rate=breath_rate,
-        cell_size=args.cell_size,
-        cell_height=args.cell_height,
-        space_vol=args.space_vol
-    )
+
+    if args.date == 'all':
+        cores = getattr(args, 'cores', 4)
+        partial_func = partial(run_for_date, args=args, sim=sim, quanta_rate=quanta_rate, breath_rate=breath_rate)
+        with concurrent.futures.ProcessPoolExecutor(max_workers=cores) as executor:
+            executor.map(partial_func, dates)
+    else:
+        model_risk(
+            name=args.name,
+            date=args.date,
+            sim=sim,
+            aer=args.aer,
+            inact_rate=args.inact_rate,
+            settl_rate=args.settl_rate,
+            quanta_rate=quanta_rate,
+            breath_rate=breath_rate,
+            cell_size=args.cell_size,
+            cell_height=args.cell_height,
+            space_vol=args.space_vol
+        )
+
 
