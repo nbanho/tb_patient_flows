@@ -1,0 +1,313 @@
+---
+title: "Person tracking data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(lubridate)
+library(tidybayes)
+library(parallel)
+library(brms)
+
+source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotting.R")
+source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
+```
+
+```{r load data}
+# files
+files <- list.files("data-clean/tracking/occupancy",
+  pattern = "\\.csv$", full.names = TRUE
+)
+
+# load data
+occupancy_df <- mclapply(files, function(file) {
+  data.table::fread(file) %>%
+    mutate(date = as.Date(basename(file)))
+}, mc.cores = 2)
+
+# add weekday
+occupancy_df <- do.call(rbind, occupancy_df) %>%
+  mutate(
+    weekday = weekdays(date, abbreviate = TRUE),
+    weekday = factor(
+      weekday,
+      levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    )
+  )
+
+# add interventions
+interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
+  mutate(
+    date = as.Date(date),
+    study_phase = factor(
+      study_phase,
+      levels = c("Baseline", "First intervention", "Second intervention")
+    )
+  )
+occupancy_df <- occupancy_df %>%
+  left_join(interventions, by = "date")
+
+# entries
+counts_df <- data.table::fread("data-clean/tracking/counts/counts.csv") %>%
+  mutate(date = as.Date(from)) %>%
+  filter(date %in% unique(occupancy_df$date))
+
+# track durations
+track_times_df <- data.table::fread(
+  "data-clean/tracking/time-in-clinic.csv"
+)
+```
+
+
+## Recorded visits and movements
+
+```{r person visits and movements}
+# number of entries
+entries_df <- counts_df %>%
+  filter(name == "entry_main") %>%
+  filter(type == "fw") %>%
+  group_by(date) %>%
+  summarise(n = sum(count, na.rm = TRUE)) %>%
+  ungroup()
+sprintf("Number of visits: %i", sum(entries_df$n))
+
+# number of movements
+sprintf("Number of movements: %i", nrow(track_times_df))
+
+# track duration
+track_times_df %>%
+  summarise(
+    median_time = median(total_time_in_clinic, na.rm = TRUE),
+    low_time = quantile(total_time_in_clinic, 0.25, na.rm = TRUE),
+    upper_time = quantile(total_time_in_clinic, 0.75, na.rm = TRUE)
+  ) %>%
+  mutate_all(~ round(.x / 60, 1))
+```
+
+
+## Occupancy over time
+
+```{r occupancy over time}
+daytime_occupancy_df <- occupancy_df %>%
+  group_by(time) %>%
+  summarise(
+    mid = median(N, na.rm = TRUE),
+    .lower = quantile(N, 0.25, na.rm = TRUE),
+    .upper = quantile(N, 0.75, na.rm = TRUE)
+  ) %>%
+  ungroup()
+weekday_occupancy_df <- occupancy_df %>%
+  group_by(weekday, time) %>%
+  summarise(mid = mean(N, na.rm = TRUE)) %>%
+  ungroup()
+
+occupancy_pl <- ggplot(mapping = aes(x = time)) +
+  geom_ribbon(
+    data = daytime_occupancy_df,
+    mapping = aes(ymin = .lower, ymax = .upper),
+    alpha = .4, fill = "grey50"
+  ) +
+  geom_line(
+    data = weekday_occupancy_df,
+    mapping = aes(y = mid, group = weekday, color = weekday),
+    size = .2, alpha = .8
+  ) +
+  geom_line(
+    data = mutate(daytime_occupancy_df, weekday = "Median"),
+    mapping = aes(y = mid, group = weekday, color = weekday),
+    size = .2, alpha = .8
+  ) +
+  scale_y_continuous(
+    name = "Number of people in waiting area",
+    limits = c(0, NA),
+    expand = c(0, 0)
+  ) +
+  scale_x_continuous(
+    name = "Daytime (hour)",
+    breaks = seq(0, 3600 * 12, by = 3600),
+    labels = function(x) paste(floor(x / 3600) + 6, ":00", sep = ""),
+    limits = c(0, 3600 * 12),
+    expand = c(0, 0)
+  ) +
+  scale_color_manual(
+    values = c(
+      "black",
+      paletteer_d("colRoz::uluru")
+    ),
+    breaks = c("Median", levels(weekday_occupancy_df$weekday)),
+    name = "Weekday"
+  ) +
+  theme_custom() +
+  theme(
+    axis.title.x = element_blank(),
+    legend.title = element_blank(),
+    legend.position = c(.99, .975),
+    legend.justification = c(0.99, 0.975),
+    legend.background = element_rect(
+      fill = "white", color = "black", linewidth = 0.4
+    ),
+    legend.key.width = unit(.66, "lines"),
+    legend.direction = "vertical",
+    legend.box = "horizontal",
+    plot.margin = margin(r = 12)
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(linewidth = .66, order = 2), ncol = 2
+    )
+  )
+saveRDS(occupancy_pl, "results/occupancy_over_time.rds")
+save_plot(
+  occupancy_pl,
+  "results/occupancy_over_time.png",
+  w = 16, h = 12
+)
+```
+
+
+## Density over time
+
+```{r density over time}
+daytime_density_df <- occupancy_df %>%
+  mutate(entropy_kde = ifelse(N <= 10, NA, entropy_kde)) %>%
+  group_by(time) %>%
+  summarise(
+    mid = median(entropy_kde, na.rm = TRUE),
+    .lower = quantile(entropy_kde, 0.25, na.rm = TRUE),
+    .upper = quantile(entropy_kde, 0.75, na.rm = TRUE)
+  ) %>%
+  ungroup()
+weekday_density_df <- occupancy_df %>%
+  mutate(entropy_kde = ifelse(N <= 10, NA, entropy_kde)) %>%
+  group_by(weekday, time) %>%
+  summarise(mid = mean(entropy_kde, na.rm = TRUE)) %>%
+  ungroup()
+
+density_pl <- ggplot(mapping = aes(x = time)) +
+  geom_ribbon(
+    data = daytime_density_df,
+    mapping = aes(ymin = .lower, ymax = .upper),
+    alpha = .4, fill = "grey50"
+  ) +
+  geom_line(
+    data = weekday_density_df,
+    mapping = aes(y = mid, group = weekday, color = weekday),
+    size = .2, alpha = .8
+  ) +
+  geom_line(
+    data = mutate(daytime_density_df, weekday = "Average"),
+    mapping = aes(y = mid, group = weekday, color = weekday),
+    size = .2, alpha = .8
+  ) +
+  scale_y_continuous(
+    name = "Entropy (higher values mean more even spread)",
+    expand = c(0, 0)
+  ) +
+  scale_x_continuous(
+    name = "Daytime (hour)",
+    breaks = seq(0, 3600 * 12, by = 3600),
+    labels = function(x) floor(x / 3600) + 6,
+    expand = c(0, 0)
+  ) +
+  scale_color_manual(
+    values = c(
+      "black",
+      paletteer_d("colRoz::uluru")
+    ),
+    breaks = c("Average", levels(weekday_density_df$weekday)),
+    name = "Weekday"
+  ) +
+  theme_custom() +
+  theme(
+    legend.position = c(.975, .05),
+    legend.justification = c(0.975, 0.05),
+    legend.background = element_rect(
+      fill = "white", color = "black", linewidth = 0.4
+    ),
+    legend.key.width = unit(.66, "lines"),
+    legend.direction = "vertical",
+    legend.box = "horizontal"
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(linewidth = .66, order = 2), ncol = 2
+    )
+  )
+save_plot(
+  density_pl,
+  "results/tracking_density_over_time.png",
+  w = 16, h = 12
+)
+````
+
+
+## Density by study phase
+
+```{r density by study phase}
+# daily average occupancy
+daily_density_df <- occupancy_df %>%
+  filter(N >= 10) %>%
+  group_by(date, weekday, study_phase) %>%
+  summarise(
+    gini = mean(gini_kde, na.rm = TRUE),
+    entropy = mean(entropy_kde, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# boxplot
+daily_density_df %>%
+  pivot_longer(
+    cols = c(gini, entropy),
+    names_to = "metric", values_to = "value"
+  ) %>%
+  ggplot(aes(x = study_phase, y = value, color = study_phase)) +
+  geom_boxplot() +
+  geom_jitter(width = .1, height = 0, alpha = .5) +
+  facet_wrap(~metric, scales = "free_y") +
+  theme_bw()
+daily_density_df %>%
+  pivot_longer(
+    cols = c(gini, entropy),
+    names_to = "metric", values_to = "value"
+  ) %>%
+  ggplot(aes(x = date, y = value)) +
+  facet_wrap(~metric, scales = "free_y") +
+  geom_point(aes(color = study_phase)) +
+  geom_smooth(method = "loess", se = TRUE) +
+  theme_bw()
+daily_density_df %>%
+  pivot_longer(
+    cols = c(gini, entropy),
+    names_to = "metric", values_to = "value"
+  ) %>%
+  ggplot(aes(x = value)) +
+  geom_density() +
+  facet_wrap(~metric, scales = "free") +
+  theme_bw()
+
+
+# model
+density_entropy_model <- brms::brm(
+  entropy ~ study_phase + weekday,
+  data = daily_density_df,
+  family = gaussian(),
+  iter = 500,
+  chains = 4,
+  cores = 1,
+  seed = 12345
+)
+summary(density_entropy_model)
+density_gini_model <- brms::brm(
+  gini ~ study_phase + weekday,
+  data = daily_density_df,
+  family = gaussian(),
+  iter = 500,
+  chains = 4,
+  cores = 1,
+  seed = 12345
+)
+summary(density_gini_model)
+```

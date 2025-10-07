@@ -1,0 +1,121 @@
+---
+title: "Clinical TB data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(lubridate)
+
+source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotting.R")
+source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
+```
+
+```{r load data}
+# load data
+clinical_df <- read_csv("data-clean/clinical/tb_cases.csv")
+
+# filter dates
+study_dates <- as.Date(
+  basename(list.files("data-clean/tracking/occupancy", pattern = "\\.csv$"))
+)
+
+clinical_df <- clinical_df %>%
+  mutate(date = as.Date(date)) %>%
+  filter(date %in% study_dates)
+
+# descriptive summaries
+sprintf("Number of study days: %s", length(unique(clinical_df$date)))
+sprintf("Number of presumptive cases: %s", n_distinct(
+  clinical_df$clinic_id[clinical_df$tb_status == "presumptive"]
+))
+sprintf("Number of confirmed cases: %s", n_distinct(
+  clinical_df$clinic_id[clinical_df$tb_status == "infectious"]
+))
+clinical_df %>%
+  filter(tb_status != "not infectious") %>%
+  summarise(
+    median_age = median(age, na.rm = TRUE),
+    low_age = quantile(age, 0.25, na.rm = TRUE),
+    upper_age = quantile(age, 0.75, na.rm = TRUE),
+    prop_female = sum(gender == "Woman", na.rm = TRUE) / n(),
+    prop_hiv = sum(hiv_status == "Positive", na.rm = TRUE) / n()
+  )
+```
+
+## TB cases over time
+
+```{r tb cases over time}
+# confirmed and presumptive TB cases over time
+tb_cases_time_df <- clinical_df %>%
+  filter(tb_status != "not infectious") %>%
+  mutate(tb_status = recode_factor(
+    tb_status,
+    "infectious" = "Confirmed",
+    "presumptive" = "Presumptive"
+  )) %>%
+  group_by(date, tb_status) %>%
+  summarise(n = n()) %>%
+  ungroup()
+
+avg_tb_cases_df <- tb_cases_time_df %>%
+  group_by(date) %>%
+  summarise(n = sum(n)) %>%
+  ungroup() %>%
+  summarise(
+    mid = median(n),
+    .lower = quantile(n, 0.25),
+    .upper = quantile(n, 0.75)
+  ) %>%
+  ungroup()
+
+# plot
+tb_cases_pl <- ggplot() +
+  geom_bar(
+    tb_cases_time_df,
+    mapping = aes(x = date, y = n, fill = tb_status),
+    stat = "identity", position = "stack"
+  ) +
+  geom_hline(
+    data = avg_tb_cases_df,
+    mapping = aes(yintercept = mid),
+    color = "black", linetype = "dashed"
+  ) +
+  geom_rect(
+    data = avg_tb_cases_df,
+    mapping = aes(ymin = .lower, ymax = .upper),
+    xmin = -Inf, xmax = Inf,
+    fill = "grey50", alpha = 0.5
+  ) +
+  scale_y_continuous(
+    name = "Number of TB cases",
+    expand = expansion(mult = c(0, 0.01)),
+    breaks = seq(0, 50, by = 5)
+  ) +
+  scale_x_date(
+    date_labels = "%b %d",
+    date_breaks = "2 weeks",
+    expand = expansion(mult = c(0.01, 0.01))
+  ) +
+  scale_fill_paletteer_d("NatParksPalettes::Cuyahoga") +
+  theme_custom() +
+  theme(
+    axis.title.x = element_blank(),
+    legend.title = element_blank(),
+    legend.position = c(.99, .95),
+    legend.justification = c(0.99, 0.95),
+    legend.background = element_rect(
+      fill = "white", color = "black", linewidth = 0.4
+    ),
+    legend.key.size = unit(0.5, "lines"),
+    legend.key.height = unit(1, "lines")
+  )
+saveRDS(tb_cases_pl, "results/clinical_tb_cases_over_time.rds")
+save_plot(
+  tb_cases_pl,
+  pdf_file = "results/clinical_tb_cases_over_time.png",
+  w = 16, h = 9
+)
+```

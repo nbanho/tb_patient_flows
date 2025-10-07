@@ -10,3 +10,7 @@ modelling-results/
 data-clean/building/
 data-clean/assumptions/
 __pycache__/
+
+*_old/
+**/*_old/
+data-clean/tracking/spatial-density.h5

@@ -38,7 +38,6 @@ valid_positions = np.column_stack((xx[mask], yy[mask]))
 np.save('data-clean/building/building-grid-mask-valid-positions.npy', valid_positions)
 
 # Volume of waiting hall
-# waiting hall
 def polygon_area(coords):
 	x, y = zip(*coords)
 	return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))

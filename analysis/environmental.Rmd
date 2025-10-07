@@ -1,0 +1,159 @@
+---
+title: "Environmental data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(lubridate)
+
+source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotting.R")
+source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
+```
+
+```{r load data}
+# load data
+aer_df <- read_csv("data-clean/environmental/air-exchange-rate.csv")
+co2_df <- read_csv("data-clean/environmental/co2-temp-humidity.csv") %>%
+  mutate(
+    date = as.Date(datetime),
+    time = floor_date(datetime, "5 minutes"),
+    time = hms::as_hms(time),
+    weekday = weekdays(date, abbreviate = TRUE),
+    weekday = factor(
+      weekday,
+      levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    )
+  )
+
+# descriptive summaries
+co2_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  summarise(
+    median_co2 = median(co2, na.rm = TRUE),
+    low_co2 = quantile(co2, 0.25, na.rm = TRUE),
+    upper_co2 = quantile(co2, 0.75, na.rm = TRUE)
+  )
+aer_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  summarise(
+    median_aer = median(aer_tmb, na.rm = TRUE),
+    low_aer = quantile(aer_tmb, 0.25, na.rm = TRUE),
+    upper_aer = quantile(aer_tmb, 0.75, na.rm = TRUE)
+  )
+```
+
+## CO2 over time
+
+```{r co2 over time}
+daytime_co2_df <- co2_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  group_by(time) %>%
+  summarise(
+    mid = median(co2, na.rm = TRUE),
+    .lower = quantile(co2, 0.25, na.rm = TRUE),
+    .upper = quantile(co2, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+co2_pl <- ggplot(daytime_co2_df, aes(x = time, y = mid)) +
+  geom_line(
+    data = filter(co2_df, device == "Aranet4 272D2"),
+    aes(x = time, y = co2, group = date),
+    color = "lightblue", alpha = 0.5, linewidth = .2
+  ) +
+  geom_ribbon(aes(ymin = .lower, ymax = .upper),
+    fill = "grey50", alpha = 0.5
+  ) +
+  geom_line(color = "black", linewidth = .3) +
+  scale_y_continuous(
+    name = "CO<sub>2</sub> (ppm)",
+    breaks = seq(200, 2000, by = 200),
+    expand = expansion(mult = c(0, 0.01))
+  ) +
+  scale_x_time(
+    breaks = hms::as_hms(c(
+      "06:00:00", "08:00:00", "10:00:00", "12:00:00",
+      "14:00:00", "16:00:00", "18:00:00"
+    )),
+    labels = c("06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00"),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  theme_custom() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = ggtext::element_markdown(),
+    plot.margin = margin(r = 12, t = 12)
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(linewidth = .66, order = 2)
+    )
+  )
+saveRDS(co2_pl, "results/environmental_co2_over_time.rds")
+save_plot(
+  co2_pl, "results/environmental_co2_over_time.png",
+  width = 16, height = 10
+)
+```
+
+
+## Ventilation over time
+
+```{r ventilation over time}
+sub_aer_df <- aer_df %>%
+  filter(device == "Aranet4 272D2")
+avg_aer_df <- sub_aer_df %>%
+  summarise(
+    mid = mean(aer_tmb, na.rm = TRUE),
+    .lower = quantile(aer_tmb, 0.25, na.rm = TRUE),
+    .upper = quantile(aer_tmb, 0.75, na.rm = TRUE)
+  )
+
+aer_pl <- ggplot() +
+  geom_point(
+    data = sub_aer_df,
+    mapping = aes(x = date, y = aer_tmb),
+    fill = "lightblue", shape = 21, size = 1
+  ) +
+  geom_linerange(
+    data = sub_aer_df,
+    mapping = aes(x = date, ymin = 0, ymax = aer_tmb),
+    color = "deepskyblue3"
+  ) +
+  geom_hline(
+    data = avg_aer_df,
+    mapping = aes(yintercept = mid),
+    color = "black", linetype = "dashed"
+  ) +
+  geom_rect(
+    data = avg_aer_df,
+    inherit.aes = FALSE,
+    aes(ymin = .lower, ymax = .upper),
+    xmin = -Inf, xmax = Inf,
+    fill = "gray50", alpha = 0.5
+  ) +
+  scale_x_date(
+    date_labels = "%b %d",
+    date_breaks = "2 weeks",
+    expand = expansion(mult = c(0.01, 0.01))
+  ) +
+  scale_y_continuous(
+    name = "Air change rate (h<sup>-1</sup>)",
+    breaks = seq(0, 30, by = 5),
+    expand = expansion(mult = c(0, 0.05)),
+    limits = c(0, NA)
+  ) +
+  theme_custom() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = ggtext::element_markdown()
+  )
+saveRDS(aer_pl, "results/environmental_ventilation_over_time.rds")
+save_plot(
+  aer_pl, "results/environmental_ventilation_over_time.png",
+  width = 16, height = 5
+)
+```

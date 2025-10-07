@@ -1,6 +1,8 @@
 import os
 import json
 import pandas as pd
+import re
+from collections import defaultdict
 from datetime import datetime
 
 def read_counts_json(file_path):
@@ -26,29 +28,28 @@ def read_counts_json(file_path):
                 value = count['value']
                 
                 # Append the data to the data list
-                data_list.append([logic['id'], from_timestamp, to_timestamp, name, value])
+                data_list.append([logic['id'], logic['name'], from_timestamp, to_timestamp, name, value])
     
     # Convert the data list into a pandas DataFrame
-    df = pd.DataFrame(data_list, columns=['id', 'from', 'to', 'type', 'count'])
+    df = pd.DataFrame(data_list, columns=['id', 'name', 'from', 'to', 'type', 'count'])
     return df
 
-# a = read_counts_json("test-data/2.1_logics_sn001EC0A01198_2024-04-15T11-30-00Z_id3413.json")
+# a = read_counts_json("data-raw/xovis.nosynch/final-data/LINE/logics_ms000732AB8D11_2_2024-05-17T13-05-00Z_id0.json")
 
-def process_files_in_folder(folder_path, output_csv_path):
-    # Initialize an empty list to hold the dataframes
-    df_list = []
-    # Loop through each file in the folder
-    for filename in os.listdir(folder_path):
-        # Check if the file is a JSON file
-        if filename.endswith('.json'):
-            # Construct the full file path
-            file_path = os.path.join(folder_path, filename)
-            # Convert the JSON file to a dataframe and append it to the list
+# Define the folder path
+folder_path = "data-raw/xovis.nosynch/final-data/LINE/"
+all_dfs = []
+for filename in os.listdir(folder_path):
+    if filename.endswith(".json"):
+        file_path = os.path.join(folder_path, filename)
+        try:
             df = read_counts_json(file_path)
-            df_list.append(df)
-    # Concatenate all dataframes into a single dataframe
-    combined_df = pd.concat(df_list, ignore_index=True)
-    # Write the combined dataframe to a CSV file
-    combined_df.to_csv(output_csv_path, index=False)
-
-process_files_in_folder("test-data/line", "test-data/line.csv")
+            all_dfs.append(df)
+        except Exception as e:
+            print(f"Skipping {filename} due to error: {e}")
+if all_dfs:
+    final_df = pd.concat(all_dfs, ignore_index=True)
+    os.makedirs("data-clean/tracking/counts", exist_ok=True)
+    final_df.to_csv("data-clean/tracking/counts/counts.csv", index=False)
+else:
+    print("No valid dataframes to concatenate.")

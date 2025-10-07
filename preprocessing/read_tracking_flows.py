@@ -97,7 +97,7 @@ def filter_daytime(df: pd.DataFrame, start_hour: int, end_hour: int) -> pd.DataF
 	
 	return filtered_df
 
-def process_event_files_in_folder(folder_path, files, output_csv_path, date):
+def process_files_in_folder(folder_path, files, output_csv_path, date):
 	# Initialize an empty list to hold the dataframes
 	df_list = []
 	# Loop through each file in the folder
@@ -146,8 +146,6 @@ grouped_files = {date: files for date, files in grouped_files.items() if datetim
 grouped_files = dict(sorted(grouped_files.items(), key=lambda item: datetime.strptime(item[0], '%Y-%m-%d')))
 
 # process files by date
-# for date in list(grouped_files.keys()):
-# 		print(f"Processing files for date: {date}")
-# 		process_event_files_in_folder(folder_path, grouped_files[date], "data-clean/tracking/unlinked/", date)
-
-process_event_files_in_folder(folder_path, grouped_files["2024-07-03"], "data-clean/tracking/unlinked/", "2024-07-03")
+for date in list(grouped_files.keys()):
+	print(f"Processing files for date: {date}")
+	process_files_in_folder(folder_path, grouped_files[date], "data-clean/tracking/unlinked/", date)
