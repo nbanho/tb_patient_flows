@@ -5,10 +5,11 @@ import pickle
 import ast
 import argparse
 import spatiotemporal_diffusion as spd
-import compute_risk_of_infection as cri
+import modelling.compute_quanta_exposure as cri
 import warnings
 import concurrent.futures
 from functools import partial
+import re
 
 linked_tb_path = 'data-clean/tracking/linked-tb/'
 dates = [
@@ -16,6 +17,7 @@ dates = [
     for file in os.listdir(linked_tb_path) 
     if file.endswith('.csv')
 ]
+dates = [d for d in dates if d != "2024-06-26"]
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run risk model simulation.")
@@ -68,6 +70,17 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
     print(f"Starting modelling for '{name}' on date '{date}'...")
     # Create the directory to save the results
     results_dir = os.path.join('modelling-results', name, date)
+    existing_sims = set()
+    if os.path.exists(results_dir):
+        files = [f for f in os.listdir(results_dir) if f.endswith('.csv')]
+        for fname in files:
+            existing_sims.update(map(int, re.findall(r'\d{1,5}', fname)))
+    existing_sims = list(existing_sims)
+    sim_range = set(range(sim[0], sim[1] + 1))
+    missing_sims = sorted(sim_range - set(existing_sims))
+    if not missing_sims:
+        print(f"All simulations in range {sim} already exist for '{name}' on date '{date}'. Skipping.")
+        return
     os.makedirs(results_dir, exist_ok=True)
     
     # Check required parameters
@@ -114,8 +127,7 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
         if aer_row.empty:
             raise ValueError(f"No air exchange rate found for date {date} and device Aranet4 272D2")
         aer = aer_row.iloc[0]['aer_tmb']
-    else:
-        aer = aer / 3600
+    aer = aer / 3600
     
     # Load quanta rate samples if not provided
     if quanta_rate is None:
@@ -167,7 +179,7 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
     diffusion_rate = (0.52 * aer + 8.61e-5) * (space_vol**(2/3)) 
     
     # Model quanta concentration and risk
-    for sim_num in range(sim[0], sim[1] + 1):
+    for sim_num in missing_sims:
         # Quanta generation rate per track and activity
         tb_s = tb_pos_df.copy()
         def replace_activity_with_quanta(row):
@@ -212,13 +224,22 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
         quanta = np.concatenate(quanta_list, axis=0)
         
         # Compute risk of infection
-        risk_df = [
-            {'new_track_id': track_id, 'duration': T, 'conc_diffusion': Q_diffu, 'risk_diffusion': P_diffu, 'conc_mixed': Q_mixed, 'risk_mixed': P_mixed}
-            for track_id, group in non_tb_ps_df.groupby('new_track_id')
-            for T, Q_diffu, P_diffu, Q_mixed, P_mixed in [cri.compute_risk(group, quanta, cell_volume, breath_rate[0], breath_rate[1], active_cells)]
-        ]
-        risk_df = pd.DataFrame(risk_df)
-        
+        risk_df = pd.DataFrame([
+            {
+            'new_track_id': tid,
+            'hour_idx': h,
+            'duration': T,
+            'conc_diffusion': Qd,
+            'conc_mixed': Qm
+            }
+            for tid, group in non_tb_ps_df.groupby('new_track_id')
+            for (tid, h, T, Qd, Qm) in cri.compute_exposure(
+            group, quanta, cell_volume, breath_rate[0], breath_rate[1], active_cells,
+            steps_per_hour=3600, dt_seconds=1.0,
+            track_id=tid
+            )
+        ])
+
         # Save the risk results
         risk_file = os.path.join(results_dir, f'risk_results_sim_{sim_num}.csv')
         risk_df.to_csv(risk_file, index=False)

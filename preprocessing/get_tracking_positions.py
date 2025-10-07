@@ -21,6 +21,7 @@ def save_large_csv(df, filepath, chunk_size=500_000):
 
 # Study dates
 linked_tb_path = 'data-clean/tracking/linked-tb/'
+# dates = ['2024-06-17']
 dates = [
     file.replace('.csv', '') 
     for file in os.listdir(linked_tb_path) 
@@ -59,6 +60,10 @@ def read_linked_tracking_data(date):
     df['time_int'] = (seconds_since_midnight - start_seconds).astype(int)
     df.drop(columns=['time'], inplace=True)
     df.rename(columns={'time_int': 'time'}, inplace=True)
+    df = (df.groupby(['time', 'new_track_id'], as_index=False)
+        .agg(position_x=('position_x', 'mean'),
+             position_y=('position_y', 'mean'), 
+             clinic_id=('clinic_id', 'first')))
     return df
 
 # Grid coordinates
