@@ -16,15 +16,13 @@ sigma_waiting = 2.99399
 mean_walking = 1.035785
 sigma_walking = 2.99252
 
-# Load and combine all CSV files
-csv_files = glob.glob('data-clean/tracking/linked-tb/*.csv')
+# Quanta rates per track_id
+csv_files = glob.glob('data-clean/tracking/linked-clinical/*.csv')
 linked_tb_df = pd.concat(
-    [df for df in (pd.read_csv(f) for f in csv_files) if 'category' in df.columns and (df['category'] == "sure").any()],
+    [df for df in (pd.read_csv(f) for f in csv_files)],
     ignore_index=True
 )
-linked_tb_df = linked_tb_df[linked_tb_df['category'] == "sure"]
-
-# Get unique new_track_id
+linked_tb_df = linked_tb_df[linked_tb_df['clinic_id'].notna()].copy()
 unique_track_ids = linked_tb_df['new_track_id'].unique()
 
 # Sample 1,000 quanta generation rates per track_id from lognormal distributions
@@ -45,6 +43,38 @@ with open(os.path.join(output_dir, 'quanta_waiting.pkl'), 'wb') as f:
 
 with open(os.path.join(output_dir, 'quanta_walking.pkl'), 'wb') as f:
     pickle.dump(quanta_walking, f)
+
+
+# Get clinical attributes
+clin_data = pd.read_csv('data-clean/clinical/tb_cases.csv')
+keys = linked_tb_df[["new_track_id", "clinic_id"]].drop_duplicates()
+merged = keys.merge(clin_data, on="clinic_id", how="left")
+hiv_flag = (
+    merged["hiv_status"]
+    .astype(str)
+    .str.strip()
+    .str.lower()
+    .eq("positive")
+    .astype("int8")
+)
+hiv_flag = hiv_flag.where(merged["hiv_status"].notna(), 0)
+tb_flag = (
+    merged["tb_status"]
+    .astype(str)
+    .str.strip()
+    .str.lower()
+    .eq("infectious")
+    .astype("int8")
+)
+tb_flag = tb_flag.where(merged["tb_status"].notna(), 0)
+merged["hiv"] = hiv_flag
+merged["tb_status_bin"] = tb_flag
+clinic_status_df = (
+    merged.groupby("new_track_id", as_index=False)
+    .agg(hiv=("hiv", "max"), tb_status=("tb_status_bin", "max"))
+     .astype({"new_track_id": "int32", "hiv": "int8", "tb_status": "int8"})
+)
+clinic_status_df.to_csv("data-clean/assumptions/clinical_status.csv", index=False)
 
 # Removal rate parameters
 settling = np.random.lognormal(mean=0.3624846, sigma=0.517269, size=n_samples) 

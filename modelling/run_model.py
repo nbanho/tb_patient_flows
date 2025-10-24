@@ -5,7 +5,7 @@ import pickle
 import ast
 import argparse
 import spatiotemporal_diffusion as spd
-import modelling.compute_quanta_exposure as cri
+import compute_quanta_exposure as cri
 import warnings
 import concurrent.futures
 from functools import partial
@@ -17,7 +17,6 @@ dates = [
     for file in os.listdir(linked_tb_path) 
     if file.endswith('.csv')
 ]
-dates = [d for d in dates if d != "2024-06-26"]
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run risk model simulation.")
@@ -28,6 +27,9 @@ def parse_args():
     parser.add_argument('--inact_rate', type=float, default=None, help='Inactivation rate (1/h)')
     parser.add_argument('--settl_rate', type=float, default=None, help='Settling rate (1/h)')
     parser.add_argument('--quanta_rate', type=str, default=None, help='Quanta rates (1/h) for waiting and walking as a tuple, e.g. "(1.0, 2.0)"')
+    parser.add_argument('--quanta_rate_hiv_mult', type=float, default=1.0, help='Multiplier for quanta rates for HIV-positive individuals as double, e.g. "6.0"')
+    parser.add_argument('--quanta_rate_confirmed_mult', type=float, default=1.0, help='Multiplier for quanta rates for people with confirmed TB as double, e.g. "8.0"')
+    parser.add_argument('--quanta_rate_presumptive_mult', type=float, default=1.0, help='Multiplier for quanta rates for people with presumptive TB as double, e.g. "1.0"')
     parser.add_argument('--breath_rate', type=str, default=None, help='Breathing rates (m3/h)for waiting and walking as a tuple, e.g. "(0.5, 0.6)"')
     parser.add_argument('--cell_size', type=float, default=0.5, help='Size of the cell (m)')
     parser.add_argument('--cell_height', type=float, default=3.0, help='Height of the cell (m)')
@@ -44,13 +46,16 @@ def run_for_date(date, args, sim, quanta_rate, breath_rate):
         inact_rate=args.inact_rate,
         settl_rate=args.settl_rate,
         quanta_rate=quanta_rate,
+        quanta_rate_hiv_mult=args.quanta_rate_hiv_mult,
+        quanta_rate_confirmed_mult=args.quanta_rate_confirmed_mult,
+        quanta_rate_presumptive_mult=args.quanta_rate_presumptive_mult,
         breath_rate=breath_rate,
         cell_size=args.cell_size,
         cell_height=args.cell_height,
         space_vol=args.space_vol
     )
 
-def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None, quanta_rate=None, breath_rate=None, cell_size=0.5, cell_height=3.0, space_vol=None):
+def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None, quanta_rate=None, quanta_rate_hiv_mult=1.0, quanta_rate_confirmed_mult=1.0, quanta_rate_presumptive_mult=1.0, breath_rate=None, cell_size=0.5, cell_height=3.0, space_vol=None):
     """
     Calculate risk model based on provided parameters.
 
@@ -61,7 +66,10 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
         aer (float, optional): Air exchange rate.
         inact_rate (float, optional): Inactivation rate.
         settl_rate (float, optional): Settling rate.
-        quanta (tuple of floats, optional): 2D tuple of quanta values for waiting and walking.
+        quanta_rate (tuple of floats, optional): 2D tuple of quanta values for waiting and walking.
+        quanta_rate_hiv_mult (float, optional): Multiplier for quanta rates for HIV-positive individuals.
+        quanta_rate_confirmed_mult (float, optional): Multiplier for quanta rates for people with confirmed TB.
+        quanta_rate_presumptive_mult (float, optional): Multiplier for quanta rates for people with presumptive TB.
         breath_rate (tuple of floats, optional): 2D tuple of breath rate values for waiting and walking.
         cell_size (float): Size of the cell. Cannot be empty.
         cell_height (float): Height of the cell. Cannot be empty.
@@ -144,6 +152,16 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
     else:
         quanta_rate = (quanta_rate[0] / 3600, quanta_rate[1] / 3600)
         
+    # Load quanta clinical attributes for quanta rate multipliers
+    clinical_status_path = 'data-clean/assumptions/clinical_status.csv'
+    if not os.path.exists(clinical_status_path):
+        raise FileNotFoundError(f"File not found: {clinical_status_path}")
+    clinical_status_df = pd.read_csv(clinical_status_path)
+    clinical_status_df['quanta_multiplier'] = 1.0
+    clinical_status_df.loc[clinical_status_df['hiv'] == 1, 'quanta_multiplier'] *= quanta_rate_hiv_mult
+    clinical_status_df.loc[clinical_status_df['tb_status'] == 1, 'quanta_multiplier'] *= quanta_rate_confirmed_mult
+    clinical_status_df.loc[clinical_status_df['tb_status'] == 0, 'quanta_multiplier'] *= quanta_rate_presumptive_mult
+        
     # Load inactivation rate samples if not provided
     if inact_rate is None:
         inactivation_path = 'data-clean/assumptions/inactivation.pkl'
@@ -189,16 +207,17 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
             new_positions = []
             for tup in positions:
                 track_id, x, y, activity = tup
+                quanta_multiplier = clinical_status_df.loc[clinical_status_df['new_track_id'] == track_id, 'quanta_multiplier'].values
                 if activity == 0:
                     if quanta_rate is not None:
-                        q = quanta_rate[0]
+                        q = quanta_rate[0] * quanta_multiplier
                     else:
-                        q = quanta_waiting[track_id][sim_num - 1]
+                        q = quanta_waiting[track_id][sim_num - 1] * quanta_multiplier
                 else:
                     if quanta_rate is not None:
-                        q = quanta_rate[1]
+                        q = quanta_rate[1] * quanta_multiplier
                     else:
-                        q = quanta_walking[track_id][sim_num - 1]
+                        q = quanta_walking[track_id][sim_num - 1] * quanta_multiplier
                 new_positions.append((track_id, x, y, q))
             return new_positions
         tb_s['positions'] = tb_s.apply(replace_activity_with_quanta, axis=1)
@@ -268,6 +287,9 @@ if __name__ == "__main__":
             inact_rate=args.inact_rate,
             settl_rate=args.settl_rate,
             quanta_rate=quanta_rate,
+            quanta_rate_hiv_mult=args.quanta_rate_hiv_mult,
+            quanta_rate_confirmed_mult=args.quanta_rate_confirmed_mult,
+            quanta_rate_presumptive_mult=args.quanta_rate_presumptive_mult,
             breath_rate=breath_rate,
             cell_size=args.cell_size,
             cell_height=args.cell_height,

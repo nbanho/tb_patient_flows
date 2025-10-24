@@ -1,24 +1,43 @@
 import os
+import re
 import pandas as pd
+from glob import glob
 import math
 from scipy.optimize import minimize
 from concurrent.futures import ProcessPoolExecutor
 
-# co2 data
-co2 = pd.read_csv('data-clean/environmental/co2-temp-humidity.csv')
-co2['datetime'] = pd.to_datetime(co2['datetime'])
-co2['date'] = co2['datetime'].dt.date
-co2['datetime'] = co2['datetime'].dt.round('T')
-co2 = co2[['device', 'date', 'datetime', 'co2', 'co2_outdoor']]
+# occupancy data and rolling mean per minute
+def occupancy_minute_rolling(df: pd.DataFrame, date_str: str, start_hour: int = 6) -> pd.DataFrame:
+    """
+    Given a raw occupancy DataFrame (for one day) with a 'time' column in seconds (0 at start_hour)
+    and an 'N' people-count column sampled every second, compute:
+      - datetime = date + start_hour + time(sec)
+      - 60-second rolling mean of N
+      - value at each full minute (take the last value within each minute)
 
-# occupancy data
-occupancy = pd.read_csv('data-clean/tracking/occupancy.csv')
-occupancy['time_minute'] = pd.to_datetime(occupancy['time_minute'])
-occupancy.rename(columns={'track_id_count': 'no_people'}, inplace=True)
-occupancy.rename(columns={'time_minute': 'datetime'}, inplace=True)
+    Returns columns: ['date', 'datetime', 'N'] where 'datetime' is minute-aligned.
+    """
+    # datetime = date + start_hour + time(s)
+    date = pd.to_datetime(date_str)
+    start_offset = pd.to_timedelta(start_hour, unit='h')
+    df = df.copy()
+    df['date'] = date
+    df['datetime'] = date + start_offset + pd.to_timedelta(df['time'], unit='s')
 
-# merge co2 and occupancy data
-df = pd.merge(co2, occupancy, on='datetime', how='left')
+    # Ensure chronological order
+    df = df.sort_values('datetime')
+
+    # Per-second series; 60-sample rolling (since data are per second)
+    s = df.set_index('datetime')['N']
+    r60 = s.rolling(window=60, min_periods=1).mean()
+
+    # Sample once per minute: last value within each minute
+    occ_minute = (
+        r60.resample('T').last().reset_index()
+    )
+    occ_minute['date'] = date
+
+    return occ_minute[['date', 'datetime', 'N']]
 
 # steady state model
 def steady_state_model(n, G, V, Cs, Cr):
@@ -105,23 +124,45 @@ def optimize_parameters(C, n, V, G, dt, A_init, Cr_init, A_bounds, Cr_bounds):
                       bounds=[A_bounds, Cr_bounds])
     return {'A': result.x[0], 'Cr': result.x[1]}
 
-# Initialize a list to store the results
+
+# CO2 data
+co2_df = pd.read_csv('data-clean/environmental/co2-temp-humidity.csv')
+co2_df['datetime'] = pd.to_datetime(co2_df['datetime'])
+co2_df['date'] = co2_df['datetime'].dt.date
+co2_df['datetime'] = co2_df['datetime'].dt.round('T')
+co2_df = co2_df[['device', 'date', 'datetime', 'co2', 'co2_outdoor']]
+
+# occupancy data
+occupancy_dir: str = 'data-clean/tracking/occupancy'
+paths = sorted(glob(os.path.join(occupancy_dir, '*.csv')))
+out = []
+for p in paths:
+    m = re.search(r'(\d{4}-\d{2}-\d{2})\.csv$', os.path.basename(p))
+    date_str = m.group(1)
+    df_raw = pd.read_csv(p)
+    out.append(occupancy_minute_rolling(df_raw, date_str))
+occupancy_df = pd.concat(out, ignore_index=True, copy=False)
+
+# merge on minute-aligned datetime (left join preserves all co2 rows)
+df = pd.merge(co2_df, occupancy_df[['datetime', 'N']], on='datetime', how='left')
+
+# initialize a list to store the results
 results = []
 
-# Group the co2 DataFrame by device and date
+# group the co2 DataFrame by device and date
 grouped_df = df.groupby(['device', 'date'])
 
-# Loop through each group (device and date)
+# loop through each group (device and date)
 for (device, date), group in grouped_df:
     C = group['co2'].tolist()
     Co = group['co2_outdoor'].tolist()[0]
     Co = min(min(C), Co) + 1
-    n = group['no_people'].tolist()
+    n = group['N'].tolist()
     V = 1178.7  # Volume of waiting area in m^3
     G = 0.004 * 60  # Assumed CO2 generation rate per person in L/min
     dt = 5 / 60  # Timestep in hours (should be 5 minutes)
     
-    # Ensure C and n are of the same length by taking the lead of C
+    # ensure C and n are of the same length by taking the lead of C
     C = C[2:]  # Remove the first two values
     n = n[1:-1]  # Remove the first (NA) and last value
 
@@ -141,11 +182,11 @@ for (device, date), group in grouped_df:
     # append results
     results.append({'device': device, 'date': date, 'aer_tmb': optimized_params['A'], 'Cr_tmb': optimized_params['Cr'], 'aer_ssm': A_ssm, 'Cr_ssm': Co})
 
-# Convert the results to a DataFrame
+# convert the results to a DataFrame
 results_df = pd.DataFrame(results)
 
-# Sort the results DataFrame by device and then date
+# sort the results DataFrame by device and then date
 results_df = results_df.sort_values(by=['device', 'date'])
 
-# Save the results to a CSV file without index but with header
+# save the results to a CSV file without index but with header
 results_df.to_csv('data-clean/environmental/air-exchange-rate.csv', index=False, header=True)

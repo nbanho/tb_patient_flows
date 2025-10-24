@@ -58,11 +58,13 @@ counts_df <- data.table::fread("data-clean/tracking/counts/counts.csv") %>%
 # track durations
 track_times_df <- data.table::fread(
   "data-clean/tracking/time-in-clinic.csv"
-)
+) %>%
+  mutate(date = as.Date(date)) %>%
+  left_join(interventions, by = "date")
 ```
 
 
-## Recorded visits and movements
+## Descriptive summaries
 
 ```{r person visits and movements}
 # number of entries
@@ -74,17 +76,63 @@ entries_df <- counts_df %>%
   ungroup()
 sprintf("Number of visits: %i", sum(entries_df$n))
 
+entries_df %>%
+  summarise(
+    median_n = median(n, na.rm = TRUE),
+    low_n = quantile(n, 0.25, na.rm = TRUE),
+    upper_n = quantile(n, 0.75, na.rm = TRUE)
+  ) %>%
+  mutate_all(~ scales::comma(round(.x, 0)))
+entries_df %>%
+  left_join(interventions, by = "date") %>%
+  group_by(study_phase) %>%
+  summarise(
+    median_n = median(n, na.rm = TRUE),
+    low_n = quantile(n, 0.25, na.rm = TRUE),
+    upper_n = quantile(n, 0.75, na.rm = TRUE)
+  ) %>%
+  mutate_if(is.numeric, ~ scales::comma(round(.x, 0)))
+
 # number of movements
 sprintf("Number of movements: %i", nrow(track_times_df))
+track_times_df %>%
+  group_by(date) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  summarise(
+    median_n = median(n, na.rm = TRUE),
+    low_n = quantile(n, 0.25, na.rm = TRUE),
+    upper_n = quantile(n, 0.75, na.rm = TRUE)
+  ) %>%
+  mutate_all(~ scales::comma(round(.x, 0)))
+track_times_df %>%
+  group_by(study_phase, date) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(study_phase) %>%
+  summarise(
+    median_n = median(n, na.rm = TRUE),
+    low_n = quantile(n, 0.25, na.rm = TRUE),
+    upper_n = quantile(n, 0.75, na.rm = TRUE)
+  ) %>%
+  mutate_if(is.numeric, ~ scales::comma(round(.x, 0)))
 
 # track duration
 track_times_df %>%
   summarise(
-    median_time = median(total_time_in_clinic, na.rm = TRUE),
-    low_time = quantile(total_time_in_clinic, 0.25, na.rm = TRUE),
-    upper_time = quantile(total_time_in_clinic, 0.75, na.rm = TRUE)
+    median_time = median(duration, na.rm = TRUE),
+    low_time = quantile(duration, 0.25, na.rm = TRUE),
+    upper_time = quantile(duration, 0.75, na.rm = TRUE)
   ) %>%
   mutate_all(~ round(.x / 60, 1))
+track_times_df %>%
+  group_by(study_phase) %>%
+  summarise(
+    median_time = median(duration, na.rm = TRUE),
+    low_time = quantile(duration, 0.25, na.rm = TRUE),
+    upper_time = quantile(duration, 0.75, na.rm = TRUE)
+  ) %>%
+  mutate_if(is.numeric, ~ round(.x / 60, 1))
 ```
 
 
@@ -103,6 +151,16 @@ weekday_occupancy_df <- occupancy_df %>%
   group_by(weekday, time) %>%
   summarise(mid = mean(N, na.rm = TRUE)) %>%
   ungroup()
+peak_occupancy_df <- occupancy_df %>%
+  group_by(date) %>%
+  summarise(peak = max(N, na.rm = TRUE)) %>%
+  ungroup()
+peak_annotation <- paste0(
+  "Daily peak: ", round_k(median(peak_occupancy_df$peak), 0), " people",
+  " (IQR ", round_k(quantile(peak_occupancy_df$peak, 0.25), 0), "-",
+  round_k(quantile(peak_occupancy_df$peak, 0.75), 0), ")"
+)
+
 
 occupancy_pl <- ggplot(mapping = aes(x = time)) +
   geom_ribbon(
@@ -116,14 +174,20 @@ occupancy_pl <- ggplot(mapping = aes(x = time)) +
     size = .2, alpha = .8
   ) +
   geom_line(
-    data = mutate(daytime_occupancy_df, weekday = "Median"),
-    mapping = aes(y = mid, group = weekday, color = weekday),
-    size = .2, alpha = .8
+    data = daytime_occupancy_df,
+    mapping = aes(y = mid),
+    size = .2, alpha = .8, color = "black"
   ) +
+  # annotate(
+  #   "text",
+  #   x = 3600 * 12, y = max(weekday_occupancy_df$mid),
+  #   label = peak_annotation,
+  #   hjust = 1.025, vjust = 2, size = 8 / cm(1)
+  # ) +
   scale_y_continuous(
     name = "Number of people in waiting area",
     limits = c(0, NA),
-    expand = c(0, 0)
+    expand = expansion(mult = c(0, 0.01))
   ) +
   scale_x_continuous(
     name = "Daytime (hour)",
@@ -133,18 +197,15 @@ occupancy_pl <- ggplot(mapping = aes(x = time)) +
     expand = c(0, 0)
   ) +
   scale_color_manual(
-    values = c(
-      "black",
-      paletteer_d("colRoz::uluru")
-    ),
-    breaks = c("Median", levels(weekday_occupancy_df$weekday)),
+    values = paletteer_d("colRoz::uluru"),
+    breaks = levels(weekday_occupancy_df$weekday),
     name = "Weekday"
   ) +
   theme_custom() +
   theme(
     axis.title.x = element_blank(),
     legend.title = element_blank(),
-    legend.position = c(.99, .975),
+    legend.position = c(0.99, 0.975),
     legend.justification = c(0.99, 0.975),
     legend.background = element_rect(
       fill = "white", color = "black", linewidth = 0.4
@@ -152,19 +213,16 @@ occupancy_pl <- ggplot(mapping = aes(x = time)) +
     legend.key.width = unit(.66, "lines"),
     legend.direction = "vertical",
     legend.box = "horizontal",
+    legend.margin = margin(l = 3, t = 3, b = 3, r = 3),
     plot.margin = margin(r = 12)
   ) +
   guides(
     color = guide_legend(
-      override.aes = list(linewidth = .66, order = 2), ncol = 2
+      override.aes = list(linewidth = .66, order = 2), ncol = 1
     )
   )
-saveRDS(occupancy_pl, "results/occupancy_over_time.rds")
-save_plot(
-  occupancy_pl,
-  "results/occupancy_over_time.png",
-  w = 16, h = 12
-)
+occupancy_pl
+saveRDS(occupancy_pl, "results/tracking_occupancy_over_time.rds")
 ```
 
 
@@ -172,38 +230,46 @@ save_plot(
 
 ```{r density over time}
 daytime_density_df <- occupancy_df %>%
-  mutate(entropy_kde = ifelse(N <= 10, NA, entropy_kde)) %>%
-  group_by(time) %>%
-  summarise(
-    mid = median(entropy_kde, na.rm = TRUE),
-    .lower = quantile(entropy_kde, 0.25, na.rm = TRUE),
-    .upper = quantile(entropy_kde, 0.75, na.rm = TRUE)
+  mutate(
+    across(c(gini_kde, entropy_kde), ~ ifelse(N <= 10, NA, .x))
   ) %>%
-  ungroup()
-weekday_density_df <- occupancy_df %>%
-  mutate(entropy_kde = ifelse(N <= 10, NA, entropy_kde)) %>%
-  group_by(weekday, time) %>%
-  summarise(mid = mean(entropy_kde, na.rm = TRUE)) %>%
-  ungroup()
+  dplyr::select(N, time, gini_kde, entropy_kde) %>%
+  pivot_longer(
+    cols = c(N, gini_kde, entropy_kde),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  group_by(time, metric) %>%
+  summarise(
+    mid = median(value, na.rm = TRUE),
+    .lower = quantile(value, 0.25, na.rm = TRUE),
+    .upper = quantile(value, 0.75, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    metric = factor(
+      metric,
+      levels = c("N", "gini_kde", "entropy_kde")
+    )
+  )
 
-density_pl <- ggplot(mapping = aes(x = time)) +
+density_pl <- ggplot(daytime_density_df, aes(x = time)) +
+  facet_wrap(~metric,
+    ncol = 1, scales = "free_y",
+    labeller = as_labeller(c(
+      N = "Number of people in clinic waiting area\n(higher values mean more crowded)",
+      gini_kde = "Gini coefficient\n(higher values mean more clustered)",
+      entropy_kde = "Entropy\n(higher values mean less clustered)"
+    )),
+    strip.position = "left"
+  ) +
+  geom_line(aes(y = mid), size = .2, alpha = .8, color = "black") +
   geom_ribbon(
-    data = daytime_density_df,
-    mapping = aes(ymin = .lower, ymax = .upper),
+    aes(ymin = .lower, ymax = .upper),
     alpha = .4, fill = "grey50"
   ) +
-  geom_line(
-    data = weekday_density_df,
-    mapping = aes(y = mid, group = weekday, color = weekday),
-    size = .2, alpha = .8
-  ) +
-  geom_line(
-    data = mutate(daytime_density_df, weekday = "Average"),
-    mapping = aes(y = mid, group = weekday, color = weekday),
-    size = .2, alpha = .8
-  ) +
   scale_y_continuous(
-    name = "Entropy (higher values mean more even spread)",
+    name = "Value",
     expand = c(0, 0)
   ) +
   scale_x_continuous(
@@ -212,85 +278,138 @@ density_pl <- ggplot(mapping = aes(x = time)) +
     labels = function(x) floor(x / 3600) + 6,
     expand = c(0, 0)
   ) +
-  scale_color_manual(
-    values = c(
-      "black",
-      paletteer_d("colRoz::uluru")
-    ),
-    breaks = c("Average", levels(weekday_density_df$weekday)),
-    name = "Weekday"
-  ) +
   theme_custom() +
   theme(
-    legend.position = c(.975, .05),
-    legend.justification = c(0.975, 0.05),
-    legend.background = element_rect(
-      fill = "white", color = "black", linewidth = 0.4
-    ),
-    legend.key.width = unit(.66, "lines"),
-    legend.direction = "vertical",
-    legend.box = "horizontal"
-  ) +
-  guides(
-    color = guide_legend(
-      override.aes = list(linewidth = .66, order = 2), ncol = 2
-    )
+    axis.title.y = element_blank(),
+    strip.placement = "outside",
+    strip.text = element_text(face = 1, margin = margin(r = 0)),
   )
+
 save_plot(
   density_pl,
   "results/tracking_density_over_time.png",
-  w = 16, h = 12
+  w = 16, h = 22
 )
 ````
 
 
-## Density by study phase
+## Intervention effects on the Gini coefficient
 
 ```{r density by study phase}
 # daily average occupancy
 daily_density_df <- occupancy_df %>%
-  filter(N >= 10) %>%
   group_by(date, weekday, study_phase) %>%
   summarise(
-    gini = mean(gini_kde, na.rm = TRUE),
-    entropy = mean(entropy_kde, na.rm = TRUE)
+    entropy = median(entropy_kde, na.rm = TRUE),
+    gini = median(gini_kde, na.rm = TRUE),
   ) %>%
   ungroup()
 
-# boxplot
+# values by study phase
 daily_density_df %>%
-  pivot_longer(
-    cols = c(gini, entropy),
-    names_to = "metric", values_to = "value"
+  group_by(study_phase) %>%
+  summarise(
+    median_gini = median(gini, na.rm = TRUE),
+    low_gini = quantile(gini, 0.25, na.rm = TRUE),
+    upper_gini = quantile(gini, 0.75, na.rm = TRUE)
   ) %>%
-  ggplot(aes(x = study_phase, y = value, color = study_phase)) +
+  ungroup() %>%
+  mutate_if(is.numeric, ~ round_k(.x, 2))
+
+# plot distribution by study phase
+ggplot(daily_density_df, aes(x = study_phase, y = gini)) +
   geom_boxplot() +
   geom_jitter(width = .1, height = 0, alpha = .5) +
-  facet_wrap(~metric, scales = "free_y") +
-  theme_bw()
-daily_density_df %>%
-  pivot_longer(
-    cols = c(gini, entropy),
-    names_to = "metric", values_to = "value"
-  ) %>%
-  ggplot(aes(x = date, y = value)) +
-  facet_wrap(~metric, scales = "free_y") +
-  geom_point(aes(color = study_phase)) +
-  geom_smooth(method = "loess", se = TRUE) +
-  theme_bw()
-daily_density_df %>%
-  pivot_longer(
-    cols = c(gini, entropy),
-    names_to = "metric", values_to = "value"
-  ) %>%
-  ggplot(aes(x = value)) +
-  geom_density() +
-  facet_wrap(~metric, scales = "free") +
-  theme_bw()
+  scale_y_continuous(
+    name = "Spatial density (Gini coefficient)",
+    expand = expansion(mult = c(0, 0.01))
+  ) +
+  scale_x_discrete(name = "Study phase") +
+  theme_custom() +
+  theme(
+    axis.title.x = element_blank(),
+    plot.margin = margin(r = 12)
+  )
 
 
 # model
-density_entropy_model <- brms::brm(
+gini_model <- brms::brm(
+  gini ~ study_phase + weekday,
+  data = daily_density_df,
+  family = Beta(),
+  iter = 500,
+  chains = 4,
+  cores = 1,
+  seed = 12345
+)
+summary(gini_model)
+
+# parameter samples
+gini_effects_smpls <- spread_draws(
+  gini_model,
+  b_study_phaseFirstintervention,
+  b_study_phaseSecondintervention
+)
+saveRDS(
+  gini_effects_smpls,
+  "results/tracking_gini_effects_samples.rds"
+)
+
+# summarise
+gini_effects <- gini_effects_smpls %>%
+  pivot_longer(
+    starts_with("b_"),
+    names_to = "parameter",
+    values_to = "value"
+  ) %>%
+  mutate(
+    study_phase = case_when(
+      parameter == "b_study_phaseFirstintervention" ~ "First intervention",
+      parameter == "b_study_phaseSecondintervention" ~ "Second intervention"
+    ),
+    study_phase = factor(
+      study_phase,
+      levels = c("First intervention", "Second intervention")
+    ),
+    odds = exp(value),
+    change = odds - 1,
+    change = -100 * change
+  ) %>%
+  group_by(study_phase) %>%
+  summarise(
+    median = median(change),
+    lower = quantile(change, 0.025),
+    upper = quantile(change, 0.975),
+    lower_80 = quantile(change, 0.1),
+    upper_80 = quantile(change, 0.9),
+    lower_50 = quantile(change, 0.25),
+    upper_50 = quantile(change, 0.75)
+  ) %>%
+  ungroup()
+
+gini_effects %>%
+  mutate_if(is.numeric, ~ round_k(.x, 2))
+```
+
+
+## Intervention effects on Entropy
+
+```{r entropy by study phase}
+# overall density distribution
+hist(daily_density_df$entropy)
+
+# values by study phase
+daily_density_df %>%
+  group_by(study_phase) %>%
+  summarise(
+    median_entropy = median(entropy, na.rm = TRUE),
+    low_entropy = quantile(entropy, 0.25, na.rm = TRUE),
+    upper_entropy = quantile(entropy, 0.75, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# model
+entropy_model <- brms::brm(
   entropy ~ study_phase + weekday,
   data = daily_density_df,
   family = gaussian(),
@@ -299,15 +418,86 @@ density_entropy_model <- brms::brm(
   cores = 1,
   seed = 12345
 )
-summary(density_entropy_model)
-density_gini_model <- brms::brm(
-  gini ~ study_phase + weekday,
-  data = daily_density_df,
-  family = gaussian(),
-  iter = 500,
-  chains = 4,
-  cores = 1,
-  seed = 12345
+summary(entropy_model)
+
+# parameter samples
+entropy_effects_smpls <- spread_draws(
+  entropy_model,
+  b_study_phaseFirstintervention,
+  b_study_phaseSecondintervention
 )
-summary(density_gini_model)
+
+# summarise
+entropy_effects <- entropy_effects_smpls %>%
+  pivot_longer(
+    starts_with("b_"),
+    names_to = "parameter",
+    values_to = "value"
+  ) %>%
+  mutate(
+    study_phase = case_when(
+      parameter == "b_study_phaseFirstintervention" ~ "First intervention",
+      parameter == "b_study_phaseSecondintervention" ~ "Second intervention"
+    ),
+    study_phase = factor(
+      study_phase,
+      levels = c("First intervention", "Second intervention")
+    ),
+  ) %>%
+  group_by(study_phase) %>%
+  summarise(
+    median = median(value),
+    lower = quantile(value, 0.025),
+    upper = quantile(value, 0.975),
+    lower_80 = quantile(value, 0.1),
+    upper_80 = quantile(value, 0.9),
+    lower_50 = quantile(value, 0.25),
+    upper_50 = quantile(value, 0.75)
+  ) %>%
+  ungroup()
+
+entropy_effects %>%
+  mutate_if(is.numeric, ~ round_k(.x, 2))
+```
+
+
+## Track time distribution
+
+```{r track time distribution}
+track_time_cat_df <- track_times_df %>%
+  mutate(
+    time_cat = cut(
+      duration,
+      breaks = c(0, 1, 5, 15, 30, Inf) * 60,
+      labels = c(
+        "<1 min", "1-5 min", "5-15 min",
+        "15-30 min", ">30 min"
+      ),
+      right = FALSE
+    )
+  ) %>%
+  group_by(time_cat) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  mutate(
+    prop = n / sum(n),
+    n = format(n, big.mark = ","),
+    label = paste0(n, " (", round_k(100 * prop, 0), "%)")
+  )
+
+duration_distr_pl <- ggplot(track_time_cat_df, aes(x = time_cat, y = prop)) +
+  geom_bar(stat = "identity", fill = "grey50", color = "black", alpha = .8) +
+  geom_text(aes(label = label), vjust = -0.5, size = 8 / cm(1)) +
+  scale_y_continuous(
+    name = "Proprtion of person movements (%)",
+    expand = expansion(mult = c(0, 0.1)),
+    labels = function(x) 100 * x
+  ) +
+  scale_x_discrete(name = "Duration of person movement") +
+  theme_custom()
+save_plot(
+  duration_distr_pl,
+  "results/tracking_duration_distribution.png",
+  w = 14, h = 12
+)
 ```
