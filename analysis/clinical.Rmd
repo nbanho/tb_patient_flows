@@ -5,6 +5,10 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+this_file <- knitr::current_input(dir = TRUE)
+parent_dir <- dirname(dirname(this_file))
+knitr::opts_knit$set(root.dir = parent_dir)
+setwd(parent_dir)
 
 library(tidyverse)
 library(lubridate)
@@ -26,24 +30,196 @@ clinical_df <- clinical_df %>%
   mutate(date = as.Date(date)) %>%
   filter(date %in% study_dates)
 
-# descriptive summaries
-sprintf("Number of study days: %s", length(unique(clinical_df$date)))
-sprintf("Number of presumptive cases: %s", n_distinct(
-  clinical_df$clinic_id[clinical_df$tb_status == "presumptive"]
-))
-sprintf("Number of confirmed cases: %s", n_distinct(
-  clinical_df$clinic_id[clinical_df$tb_status == "infectious"]
-))
+# add interventions
+interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
+  mutate(
+    date = as.Date(date),
+    study_phase = factor(
+      study_phase,
+      levels = c("Baseline", "First intervention", "Second intervention")
+    )
+  )
+clinical_df <- clinical_df %>%
+  left_join(interventions, by = "date")
+
+# classify incident vs prevalent TB cases
+clinical_df <- clinical_df %>%
+  mutate(tb_incident = if_else(
+    is.na(tb_treat_status), "Incident", "On treatment"
+  ))
+```
+
+
+## Linelist data
+
+```{r linelist data}
+# full data
+full_clinical_df <- readxl::read_excel(
+  "data-raw/clinical/complete-clinic-data edit 17.02.25.xlsx"
+) %>%
+  dplyr::select(1, 8, 12, 13, 15) %>%
+  set_names(c(
+    "clinic_id", "symptoms",
+    "xpert_detect", "xpert_res", "xray_res"
+  )) %>%
+  mutate(across(-clinic_id, ~ if_else(is.na(.x), "", .x))) %>%
+  mutate(
+    symptoms = gsub(";", "; ", symptoms),
+    xpert_detect = case_when(
+      grepl("not detected", tolower(xpert_detect)) ~ "Not detected",
+      grepl("invalid", tolower(xpert_detect)) ~ "Invalid",
+      grepl("not submitted", tolower(xpert_detect)) ~ "Not submitted",
+      grepl("mtb", tolower(xpert_detect)) ~ "Detected"
+    ),
+    xpert_res = gsub("\\d", "", xpert_res),
+    xray_res = if_else(xray_res == "", "Not done", xray_res)
+  ) %>%
+  rowwise() %>%
+  mutate(
+    xpert_res = if_else(
+      xpert_detect == "Detected",
+      paste0(xpert_detect, " (", xpert_res, ")"),
+      xpert_detect
+    )
+  ) %>%
+  ungroup() %>%
+  dplyr::select(-xpert_detect, -symptoms)
+
+
 clinical_df %>%
-  filter(tb_status != "not infectious") %>%
-  summarise(
-    median_age = median(age, na.rm = TRUE),
-    low_age = quantile(age, 0.25, na.rm = TRUE),
-    upper_age = quantile(age, 0.75, na.rm = TRUE),
-    prop_female = sum(gender == "Woman", na.rm = TRUE) / n(),
-    prop_hiv = sum(hiv_status == "Positive", na.rm = TRUE) / n()
+  dplyr::select(
+    clinic_id, date, age, gender, hiv_status, tb_status, tb_treat_status
+  ) %>%
+  arrange(date) %>%
+  mutate(
+    tb_treat_status = if_else(is.na(tb_treat_status), "", "On treatment"),
+    date = format(date, "%b %d"),
+    gender = recode(
+      gender,
+      !!!c("Man" = "M", "Woman" = "F")
+    ),
+    hiv_status = recode(
+      hiv_status,
+      !!!c("Positive" = "HIV+", "Negative" = "HIV-")
+    ),
+  ) %>%
+  left_join(full_clinical_df, by = "clinic_id") %>%
+  mutate(
+    tb_status = case_when(
+      tb_treat_status == "On treatment" ~ "On treatment",
+      tb_treat_status == "" & tb_status == "infectious" ~ "Confirmed",
+      tb_treat_status == "" & tb_status == "presumptive" ~ "Presumptive"
+    )
+  ) %>%
+  dplyr::select(-tb_treat_status) %>%
+  knitr::kable(
+    format = "html",
+    caption = "Linelist of clinical TB data",
+    col.names = c(
+      "ID", "Date", "Age", "Sex", "HIV status", "TB status",
+      "Xpert MTB", "Chest X-ray"
+    ),
+    align = "llllllll"
   )
 ```
+
+
+## Descriptive summaries
+
+```{r descriptive summaries}
+# study days
+sprintf("First study day: %s", min(interventions$date))
+sprintf("Last study day: %s", max(interventions$date))
+study_dates %>%
+  length()
+clinical_df %>%
+  distinct(date, study_phase) %>%
+  count(study_phase) %>%
+  mutate(p = round(100 * n / sum(n)))
+
+# patients
+clinical_df %>%
+  count()
+clinical_df %>%
+  count(study_phase) %>%
+  ungroup() %>%
+  mutate(p = round(100 * n / sum(n)))
+
+# age
+clinical_df %>%
+  summarise(across(age, .fns = list(
+    median = ~ median(., na.rm = TRUE),
+    lower = ~ quantile(., 0.25, na.rm = TRUE),
+    upper = ~ quantile(., 0.75, na.rm = TRUE)
+  ))) %>%
+  unlist() %>%
+  as.numeric()
+clinical_df %>%
+  group_by(study_phase) %>%
+  summarise(across(age, .fns = list(
+    median = ~ median(., na.rm = TRUE),
+    lower = ~ quantile(., 0.25, na.rm = TRUE),
+    upper = ~ quantile(., 0.75, na.rm = TRUE)
+  )))
+
+# gender
+clinical_df %>%
+  count(gender) %>%
+  mutate(p = round(100 * n / sum(n)))
+clinical_df %>%
+  group_by(study_phase) %>%
+  count(gender) %>%
+  mutate(p = round(100 * n / sum(n))) %>%
+  filter(gender == "Woman")
+
+# HIV status
+clinical_df %>%
+  count(hiv_status) %>%
+  mutate(p = round(100 * n / sum(n)))
+clinical_df %>%
+  group_by(study_phase) %>%
+  count(hiv_status) %>%
+  mutate(p = round(100 * n / sum(n))) %>%
+  filter(hiv_status == "Positive")
+
+# TB cases
+clinical_df %>%
+  count(tb_incident) %>%
+  mutate(p = round(100 * n / nrow(clinical_df)))
+clinical_df %>%
+  group_by(study_phase) %>%
+  count(tb_incident) %>%
+  mutate(p = round(100 * n / sum(n)))
+
+clinical_df %>%
+  filter(tb_incident == "Incident") %>%
+  count(tb_status) %>%
+  mutate(p = round(100 * n / sum(n)))
+clinical_df %>%
+  filter(tb_incident == "Incident") %>%
+  group_by(study_phase) %>%
+  count(tb_status) %>%
+  ungroup() %>%
+  group_by(study_phase) %>%
+  mutate(p = round(100 * n / sum(n))) %>%
+  ungroup()
+
+clinical_df %>%
+  filter(tb_incident != "Incident") %>%
+  count(tb_status) %>%
+  mutate(p = round(100 * n / sum(n)))
+clinical_df %>%
+  filter(tb_incident != "Incident") %>%
+  count(study_phase) %>%
+  mutate(p = round(100 * n / sum(n)))
+
+clinical_df %>%
+  filter(tb_incident != "Incident") %>%
+  group_by(study_phase) %>%
+  count(tb_status) %>%
+  mutate(p = round(100 * n / sum(n)))
+```
+
 
 ## TB cases over time
 
@@ -58,18 +234,12 @@ tb_cases_time_df <- clinical_df %>%
   )) %>%
   group_by(date, tb_status) %>%
   summarise(n = n()) %>%
-  ungroup()
-
-avg_tb_cases_df <- tb_cases_time_df %>%
-  group_by(date) %>%
-  summarise(n = sum(n)) %>%
   ungroup() %>%
-  summarise(
-    mid = median(n),
-    .lower = quantile(n, 0.25),
-    .upper = quantile(n, 0.75)
-  ) %>%
-  ungroup()
+  arrange(date) %>%
+  mutate(
+    date = format(date, "%b %d"),
+    date = factor(date, levels = unique(date))
+  )
 
 # plot
 tb_cases_pl <- ggplot() +
@@ -78,28 +248,18 @@ tb_cases_pl <- ggplot() +
     mapping = aes(x = date, y = n, fill = tb_status),
     stat = "identity", position = "stack"
   ) +
-  geom_hline(
-    data = avg_tb_cases_df,
-    mapping = aes(yintercept = mid),
-    color = "black", linetype = "dashed"
-  ) +
-  geom_rect(
-    data = avg_tb_cases_df,
-    mapping = aes(ymin = .lower, ymax = .upper),
-    xmin = -Inf, xmax = Inf,
-    fill = "grey50", alpha = 0.5
-  ) +
   scale_y_continuous(
-    name = "Number of TB cases",
+    name = "Number of people with TB",
     expand = expansion(mult = c(0, 0.01)),
     breaks = seq(0, 50, by = 5)
   ) +
-  scale_x_date(
-    date_labels = "%b %d",
-    date_breaks = "2 weeks",
+  scale_x_discrete(
+    breaks = levels(tb_cases_time_df$date)[
+      seq(1, length(levels(tb_cases_time_df$date)), by = 14)
+    ],
     expand = expansion(mult = c(0.01, 0.01))
   ) +
-  scale_fill_paletteer_d("NatParksPalettes::Cuyahoga") +
+  scale_fill_paletteer_d("nationalparkcolors::Acadia", direction = -1) +
   theme_custom() +
   theme(
     axis.title.x = element_blank(),
@@ -112,10 +272,6 @@ tb_cases_pl <- ggplot() +
     legend.key.size = unit(0.5, "lines"),
     legend.key.height = unit(1, "lines")
   )
+tb_cases_pl
 saveRDS(tb_cases_pl, "results/clinical_tb_cases_over_time.rds")
-save_plot(
-  tb_cases_pl,
-  pdf_file = "results/clinical_tb_cases_over_time.png",
-  w = 16, h = 9
-)
 ```

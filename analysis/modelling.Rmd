@@ -10,6 +10,7 @@ library(tidyverse)
 library(lubridate)
 library(brms)
 library(tidybayes)
+library(parallel)
 
 source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotting.R")
 source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
@@ -20,7 +21,7 @@ source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/format
 ```{r check convergence}
 # files for one day
 sim_files <- list.files(
-  "modelling-results/uncertain/2024-06-26/",
+  "modelling-results/uncertain_all_equal_infectious/2024-06-26/",
   pattern = ".csv$", full.names = TRUE
 )
 
@@ -32,7 +33,7 @@ sim_daily_inf <- map_dfr(sim_files, function(file) {
       risk = 1 - exp(-conc_diffusion)
     ) %>%
     group_by(sim) %>%
-    summarise(exp_inf = sum(risk) / sum(duration) * 3600) %>%
+    summarise(exp_inf = sum(risk)) %>%
     ungroup()
 })
 
@@ -44,100 +45,94 @@ sim_daily_inf %>%
 cumquantile <- function(x, p = .5) {
   purrr::map_dbl(seq_along(x), ~ quantile(x[1:.x], p))
 }
-sim_daily_inf %>%
+conv_pl <- sim_daily_inf %>%
   arrange(sim) %>%
   mutate(
     median = cumquantile(exp_inf, .5),
-    lower = cumquantile(exp_inf, .025),
-    upper = cumquantile(exp_inf, .975),
+    lower = cumquantile(exp_inf, .25),
+    upper = cumquantile(exp_inf, .75),
     lower_80 = cumquantile(exp_inf, .1),
-    upper_80 = cumquantile(exp_inf, .9)
+    upper_80 = cumquantile(exp_inf, .9),
+    lower_95 = cumquantile(exp_inf, .025),
+    upper_95 = cumquantile(exp_inf, .975)
   ) %>%
   ggplot(aes(x = sim)) +
   geom_line(aes(y = median)) +
-  geom_line(aes(y = lower), linetype = "dashed", color = "blue") +
-  geom_line(aes(y = upper), linetype = "dashed", color = "blue") +
-  geom_line(aes(y = lower_80), linetype = "dashed", color = "skyblue") +
-  geom_line(aes(y = upper_80), linetype = "dashed", color = "skyblue")
+  geom_line(aes(y = lower, color = "50%-CrI"), linetype = "dashed") +
+  geom_line(aes(y = upper, color = "50%-CrI"), linetype = "dashed") +
+  geom_line(aes(y = lower_80, color = "80%-CrI"), linetype = "dashed") +
+  geom_line(aes(y = upper_80, color = "80%-CrI"), linetype = "dashed") +
+  geom_line(aes(y = lower_95, color = "95%-CrI"), linetype = "dashed") +
+  geom_line(aes(y = upper_95, color = "95%-CrI"), linetype = "dashed") +
+  scale_y_log10(name = "Estimated number of Mtb infections") +
+  scale_x_continuous(
+    name = "Number of simulations",
+    expand = expansion(mult = c(0, 0.01)), limits = c(1, NA)
+  ) +
+  scale_color_brewer(name = "Credible interval", type = "qual", palette = 1) +
+  theme_custom() +
+  theme(legend.title = element_blank())
+save_plot(
+  conv_pl,
+  "results/modelling_convergence.png",
+  w = 16, h = 10
+)
 ```
 
-## Risk of infection over time
+
+## Risk of infection over the study
+
+### Risk per day
 
 ```{r risk over time}
 # modelling results
-data_dir <- "modelling-results/uncertain/"
+data_dir <- "modelling-results/uncertain_all_equal_infectious/"
 folders <- list.dirs(data_dir, recursive = FALSE, full.names = TRUE)
 files <- list.files(folders, pattern = "\\.csv$", full.names = TRUE)
-daily_risk_df <- map_dfr(files, function(f) {
+daily_person_risk_df <- mclapply(files, function(f) {
+  # simulation and date
   sim <- str_extract(basename(f), "(?<=_sim_)\\d+")
   date <- basename(dirname(f))
+
+  # person features
+  pf_df <- read_csv(paste0(
+    "data-clean/tracking/person-features/",
+    date, ".csv"
+  ))
+
+  # modelling result
   df <- read_csv(f) %>%
+    mutate(sim = sim, date = as.Date(date)) %>%
     filter(hour_idx < 12) %>%
+    left_join(pf_df, by = c("new_track_id", "date")) %>%
     mutate(
       risk_diffusion = 1 - exp(-conc_diffusion),
       risk_mixed = 1 - exp(-conc_mixed)
     ) %>%
+    group_by(sim, date, female, healthcare_worker) %>%
     summarise(
       infections_diffusion = sum(risk_diffusion),
       infections_mixed = sum(risk_mixed),
       duration = sum(duration)
     ) %>%
-    mutate(sim = sim, date = date) %>%
-    dplyr::select(date, sim, everything())
+    ungroup() %>%
+    dplyr::select(date, sim, female, healthcare_worker, everything())
   return(df)
-})
+}, mc.cores = 6)
+daily_person_risk_df <- do.call(rbind, daily_person_risk_df)
 
 # compute infection rates
-daily_risk_df <- daily_risk_df %>%
-  mutate(
-    date = as.Date(date),
-    rate_diffusion = infections_diffusion / duration * 3600 * 12,
-    rate_mixed = infections_mixed / duration * 3600 * 12
-  )
-
-# plot risk over time
-risk_time_pl <- daily_risk_df %>%
-  ggplot(aes(x = date, y = rate_diffusion)) +
-  stat_lineribbon(
-    .width = c(0.5, 0.8, 0.95),
-  ) +
-  scale_fill_brewer(
-    palette = "Blues",
-    labels = rev(c("50%", "80%", "95%"))
-  ) +
-  stat_summary(
-    fun = median, geom = "point", shape = 23, size = 2,
-    colour = "black", fill = "white"
-  ) +
-  labs(
-    fill = "Credible interval",
-    x = "Date",
-    y = "Estimated daily number of TB infections"
-  ) +
-  theme_custom() +
-  theme(
-    legend.position = c(.95, .95),
-    legend.justification = c(.95, .95),
-    legend.background = element_rect(
-      fill = "white", color = "black", linewidth = 1 / cm(1)
-    )
-  )
-risk_time_pl
-```
-
-
-## Intervention effects
-
-```{r load data}
-# summarise rate across simulations
-rate_df <- daily_risk_df %>%
-  group_by(date) %>%
+daily_risk_df <- daily_person_risk_df %>%
+  group_by(sim, date) %>%
   summarise(
-    across(c(rate_diffusion, rate_mixed), median)
+    infections_diffusion = sum(infections_diffusion),
+    infections_mixed = sum(infections_mixed),
+    duration = sum(duration)
   ) %>%
   ungroup() %>%
   mutate(
-    rate_ratio = rate_diffusion / rate_mixed
+    rate_diffusion = log(infections_diffusion / duration * 3600),
+    rate_mixed = log(infections_mixed / duration * 3600)
   )
 
 # add interventions
@@ -149,12 +144,307 @@ interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
       levels = c("Baseline", "First intervention", "Second intervention")
     )
   )
-
-rate_df <- rate_df %>%
+daily_risk_df <- daily_risk_df %>%
   left_join(interventions, by = "date")
 
-# add weekday
-rate_df <- rate_df %>%
+# inspect
+daily_risk_df %>%
+  group_by(date, study_phase) %>%
+  summarise(across(c(rate_diffusion, rate_mixed), median)) %>%
+  ungroup() %>%
+  ggplot(aes(x = date, y = rate_diffusion, color = study_phase)) +
+  geom_point()
+
+# daily average risk
+avg_daily_risk <- daily_risk_df %>%
+  group_by(date, study_phase) %>%
+  summarise(
+    median = median(infections_diffusion, na.rm = TRUE),
+    lower = quantile(infections_diffusion, 0.025, na.rm = TRUE),
+    upper = quantile(infections_diffusion, 0.975, na.rm = TRUE),
+    lower_80 = quantile(infections_diffusion, 0.1, na.rm = TRUE),
+    upper_80 = quantile(infections_diffusion, 0.9, na.rm = TRUE),
+    lower_50 = quantile(infections_diffusion, 0.25, na.rm = TRUE),
+    upper_50 = quantile(infections_diffusion, 0.75, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  arrange(date) %>%
+  mutate(
+    group = (study_phase != lag(study_phase)),
+    group = ifelse(is.na(group), TRUE, group),
+    group = cumsum(group),
+    date = format(date, "%b %d"),
+    date = factor(
+      date,
+      levels = unique(date)
+    )
+  )
+
+# overall
+overall_avg_risk <- c(
+  median = median(avg_daily_risk$median, na.rm = TRUE),
+  lower = quantile(avg_daily_risk$median, 0.25, na.rm = TRUE),
+  upper = quantile(avg_daily_risk$median, 0.75, na.rm = TRUE)
+)
+
+# plot risk over time
+risk_time_pl <- ggplot(
+  data = avg_daily_risk,
+  mapping = aes(x = date, colour = study_phase, group = group)
+) +
+  geom_linerange(
+    data = avg_daily_risk,
+    mapping = aes(ymin = lower, ymax = upper, alpha = "95%-CrI"),
+    size = 2
+  ) +
+  geom_linerange(
+    data = avg_daily_risk,
+    mapping = aes(ymin = lower_80, ymax = upper_80, alpha = "80%-CrI"),
+    size = 2
+  ) +
+  geom_linerange(
+    data = avg_daily_risk,
+    mapping = aes(ymin = lower_50, ymax = upper_50, alpha = "50%-CrI"),
+    size = 2
+  ) +
+  geom_line(
+    data = avg_daily_risk,
+    mapping = aes(y = median),
+    color = "black"
+  ) +
+  geom_point(
+    data = avg_daily_risk,
+    mapping = aes(y = median, fill = study_phase),
+    color = "black", size = 1, shape = 21
+  ) +
+  scale_x_discrete(
+    breaks = levels(avg_daily_risk$date)[
+      seq(1, length(levels(avg_daily_risk$date)), by = 14)
+    ],
+    expand = expansion(mult = c(0.01, 0.01))
+  ) +
+  scale_y_log10(
+    name = "Estimated number of Mtb infections",
+    expand = c(0, 0),
+    breaks = c(0.1, 1, 10, 100)
+  ) +
+  scale_colour_manual(
+    values = paletteer_d("colRoz::uluru"),
+    name = "Study phase",
+    labels = c(
+      "Baseline",
+      "1<sup>st</sup> intervention",
+      "2<sup>nd</sup> intervention"
+    )
+  ) +
+  scale_fill_manual(
+    values = paletteer_d("colRoz::uluru"),
+    name = "Study phase",
+    labels = c(
+      "Baseline",
+      "1<sup>st</sup> intervention",
+      "2<sup>nd</sup> intervention"
+    )
+  ) +
+  scale_alpha_manual(
+    values = c("95%-CrI" = 0.2, "80%-CrI" = 0.4, "50%-CrI" = 0.6),
+    name = "Credible interval"
+  ) +
+  theme_custom() +
+  theme(
+    legend.position = "bottom",
+    legend.background = element_rect(
+      fill = "white", color = "black", linewidth = 0.4
+    ),
+    legend.title = element_blank(), ,
+    legend.direction = "horizontal",
+    legend.text = element_markdown(margin = margin(l = -2)),
+    legend.key.height = unit(.66, "lines"),
+    legend.box = "horizontal",
+    plot.margin = margin(r = 8, b = 8),
+    axis.title.x = element_blank()
+  ) +
+  guides(
+    alpha = guide_legend(order = 1),
+    colour = guide_legend(order = 2),
+    fill = "none"
+  )
+save_plot(
+  risk_time_pl,
+  "results/modelling_risk_per_day.png",
+  w = 16, h = 10
+)
+```
+
+
+### Risk overall
+
+```{r risk overall}
+# overall risk
+overall_risk_df <- daily_risk_df %>%
+  group_by(sim) %>%
+  summarise(
+    total_infections_diffusion = sum(infections_diffusion),
+    total_infections_mixed = sum(infections_mixed),
+    total_difference = total_infections_diffusion - total_infections_mixed,
+    total_change = 100 * log(
+      total_infections_diffusion / total_infections_mixed
+    )
+  ) %>%
+  ungroup() %>%
+  pivot_longer(
+    starts_with("total_"),
+    names_to = "model",
+    values_to = "infections"
+  ) %>%
+  pivot_wider(
+    names_from = model,
+    values_from = infections
+  ) %>%
+  arrange(desc(total_infections_diffusion)) %>%
+  mutate(
+    sim = 1:n()
+  ) %>%
+  pivot_longer(
+    starts_with("total_"),
+    names_to = "model",
+    values_to = "infections"
+  ) %>%
+  mutate(
+    model = recode_factor(
+      model,
+      "total_difference" = "**Difference: NUM – UM**<br>(proximity effect)",
+      "total_infections_mixed" = "**Uniform mixed model**<br>(UM: without proximity)",
+      "total_infections_diffusion" = "**Non-uniform mixed model**<br>(NUM: with proximity)",
+      "total_change" = "Percent change"
+    )
+  )
+
+# summary
+overall_risk_df_summary <- overall_risk_df %>%
+  group_by(model) %>%
+  summarise(
+    median = median(infections, na.rm = TRUE),
+    lower = quantile(infections, 0.025, na.rm = TRUE),
+    upper = quantile(infections, 0.975, na.rm = TRUE)
+  ) %>%
+  mutate(
+    label = paste0(
+      "Median: ", round_k(median, 0), " ",
+      "(95%-CrI ", round_k(lower, 0), "–", round_k(upper, 0), ")"
+    )
+  )
+overall_risk_df_summary
+
+# plot
+risk_difference_pl <- overall_risk_df %>%
+  filter(model != "Percent change") %>%
+  ggplot(aes(x = infections, y = model, color = model)) +
+  tidybayes::stat_interval(
+    aes(alpha = after_stat(level)),
+    .width = c(.5, .8, .95),
+    point_interval = median_qi
+  ) +
+  geom_point(
+    data = overall_risk_df_summary %>%
+      filter(model != "Percent change"),
+    mapping = aes(x = median),
+    color = "black", size = 2, shape = 23, fill = "white"
+  ) +
+  geom_text(
+    data = overall_risk_df_summary %>%
+      filter(model != "Percent change"),
+    mapping = aes(
+      x = median, y = model,
+      label = label
+    ),
+    hjust = 0, vjust = -1,
+    size = 8 / cm(1)
+  ) +
+  scale_x_continuous(
+    name = "Estimated expected number of new Mtb infections over the study",
+    expand = expansion(mult = c(0, 0.01)),
+    limits = c(0, NA)
+  ) +
+  scale_color_paletteer_d("wesanderson::AsteroidCity1") +
+  ggtitle("A") +
+  theme_custom() +
+  theme(
+    axis.text.y = element_markdown(),
+    axis.title.y = element_blank(),
+    legend.position = "none",
+    plot.title.position = "plot"
+  )
+risk_difference_pl
+```
+
+
+### Risk per hour
+
+```{r risk per hour}
+# hourly risk
+daily_risk_df %>%
+  group_by(sim) %>%
+  summarise(
+    hourly_rate_diffusion = sum(infections_diffusion) / sum(duration) * 3600,
+    hourly_rate_mixed = sum(infections_mixed) / sum(duration) * 3600
+  ) %>%
+  pivot_longer(
+    starts_with("hourly_rate_"),
+    names_to = "model",
+    values_to = "hourly_rate"
+  ) %>%
+  group_by(model) %>%
+  summarise(
+    median = median(hourly_rate, na.rm = TRUE),
+    lower = quantile(hourly_rate, 0.025, na.rm = TRUE),
+    upper = quantile(hourly_rate, 0.975, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate_if(is.numeric, ~ round_k(100 * .x, 2))
+```
+
+
+## Intervention effects
+
+### Estimated changes in rate ratios
+
+```{r load data}
+# risks with fixed air exchange rate
+fixed_files <- list.files(
+  "modelling-results/fixed_all_equal_infectious/",
+  pattern = "\\.csv$", full.names = TRUE, recursive = TRUE
+)
+fixed_risk_df <- map_dfr(fixed_files, function(f) {
+  date <- str_extract(basename(dirname(f)), "\\d{4}-\\d{2}-\\d{2}")
+  pf_df <- read_csv(paste0(
+    "data-clean/tracking/person-features/",
+    date, ".csv"
+  ))
+  df <- read_csv(f) %>%
+    filter(hour_idx < 12) %>%
+    mutate(date = as.Date(date)) %>%
+    left_join(pf_df, by = c("new_track_id", "date")) %>%
+    mutate(
+      risk_diffusion = 1 - exp(-conc_diffusion),
+      risk_mixed = 1 - exp(-conc_mixed)
+    ) %>%
+    dplyr::select(date, new_track_id, everything())
+  return(df)
+})
+
+# add interventions
+fixed_risk_df <- fixed_risk_df %>%
+  group_by(date, female, healthcare_worker) %>%
+  summarise(
+    infections_diffusion = sum(risk_diffusion),
+    infections_mixed = sum(risk_mixed),
+    duration = sum(duration)
+  ) %>%
+  left_join(interventions, by = "date")
+
+# add weekdays
+fixed_risk_df <- fixed_risk_df %>%
   mutate(
     weekday = weekdays(date, abbreviate = TRUE),
     weekday = factor(
@@ -163,44 +453,152 @@ rate_df <- rate_df %>%
     )
   )
 
-# add study day
-rate_df <- rate_df %>%
-  mutate(study_day = as.numeric(date - min(date)))
+# sum by day
+fixed_daily_risk_df <- fixed_risk_df %>%
+  group_by(date, weekday, study_phase) %>%
+  summarise(
+    infections_diffusion = sum(infections_diffusion),
+    infections_mixed = sum(infections_mixed),
+    duration = sum(duration)
+  ) %>%
+  ungroup()
 
-# add air exchange rate
-aer_data <- read_csv("data-clean/environmental/air-exchange-rate.csv") %>%
-  mutate(date = as.Date(date)) %>%
-  filter(device == "Aranet4 272D2") %>%
-  dplyr::select(date, aer_tmb) %>%
-  rename(aer = aer_tmb)
-rate_df <- rate_df %>%
-  left_join(aer_data, by = "date")
+# rate change
+fixed_daily_risk_df <- fixed_daily_risk_df %>%
+  mutate(
+    infections_diff = infections_diffusion - infections_mixed,
+    rate_diffusion = infections_diffusion / duration * 3600,
+    rate_mixed = infections_mixed / duration * 3600,
+    rate_diff = rate_diffusion - rate_mixed,
+    rate_ratio = rate_diffusion / rate_mixed,
+    adjusted_rate_ratio = rate_ratio / duration * 3600
+  )
 
-# inspect risk ratio
-rate_df %>%
-  ggplot(aes(x = date, y = rate_ratio, color = study_phase)) +
+# inspect
+fixed_daily_risk_df %>%
+  ggplot(aes(
+    x = date, y = adjusted_rate_ratio,
+    color = study_phase
+  )) +
   geom_point()
-hist(log(mr_ratio$risk_ratio))
+
+# summary by study phase
+summary_daily_fixed_risk_df <- fixed_daily_risk_df %>%
+  group_by(study_phase) %>%
+  summarise(
+    median = median(adjusted_rate_ratio, na.rm = TRUE),
+    lower = quantile(adjusted_rate_ratio, 0.25, na.rm = TRUE),
+    upper = quantile(adjusted_rate_ratio, 0.75, na.rm = TRUE)
+  ) %>%
+  ungroup()
+interventions_group <- interventions %>%
+  arrange(date) %>%
+  mutate(
+    group = (study_phase != lag(study_phase)),
+    group = ifelse(is.na(group), TRUE, group),
+    group = cumsum(group)
+  ) %>%
+  group_by(group, study_phase) %>%
+  arrange(date) %>%
+  slice(1, n()) %>%
+  ungroup()
+summary_daily_fixed_risk_df <- summary_daily_fixed_risk_df %>%
+  left_join(interventions_group, by = "study_phase")
+
+# reformat date
+fixed_daily_risk_df_reformatted <- fixed_daily_risk_df %>%
+  mutate(
+    date = format(date, "%b %d"),
+    date = factor(
+      date,
+      levels = unique(date)
+    )
+  )
+summary_daily_fixed_risk_df <- summary_daily_fixed_risk_df %>%
+  mutate(
+    date = format(date, "%b %d"),
+    date = factor(
+      date,
+      levels = unique(fixed_daily_risk_df$date)
+    )
+  )
+
+# plot rate difference
+rate_diff_pl <- ggplot(
+  mapping = aes(x = date, color = study_phase, fill = study_phase)
+) +
+  geom_point(
+    data = fixed_daily_risk_df_reformatted,
+    mapping = aes(y = adjusted_rate_ratio),
+    shape = 21, fill = "white"
+  ) +
+  geom_line(
+    data = summary_daily_fixed_risk_df,
+    mapping = aes(y = median, group = group),
+    linetype = "dashed"
+  ) +
+  geom_ribbon(
+    data = summary_daily_fixed_risk_df,
+    mapping = aes(ymin = lower, ymax = upper, group = group),
+    alpha = 0.5, color = NA
+  ) +
+  scale_color_manual(
+    values = paletteer_d("colRoz::uluru"),
+    name = "Study phase"
+  ) +
+  scale_x_discrete(
+    breaks = levels(fixed_daily_risk_df_reformatted$date)[
+      seq(1, length(levels(fixed_daily_risk_df_reformatted$date)), by = 14)
+    ],
+    expand = expansion(mult = c(0.01, 0.01))
+  ) +
+  scale_fill_manual(
+    values = paletteer_d("colRoz::uluru"),
+    name = "Study phase",
+  ) +
+  scale_y_continuous(
+    name = "Person-time adjusted rate ratio (NUM/UM model, h⁻¹)",
+  ) +
+  theme_custom() +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none"
+  )
+
+rate_diff_pl
+```
+
+
+### Estimated intervention effects
+
+```{r intervention effects}
+# add weekday
+fixed_daily_risk_df <- fixed_daily_risk_df %>%
+  mutate(
+    weekday = weekdays(date, abbreviate = TRUE),
+    weekday = factor(
+      weekday,
+      levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    )
+  )
 
 # regression model
-logmodel_rr <- brm(
-  log(rate_df) ~ study_day + study_phase + weekday + I(1 / aer),
-  data = rate_df,
+risk_ratio_model <- brm(
+  log(adjusted_rate_ratio) ~ study_phase + weekday,
+  data = fixed_daily_risk_df,
   family = gaussian(),
   chains = 4, cores = 4, iter = 2000,
   seed = 12345
 )
-summary(logmodel_rr)
+summary(risk_ratio_model)
 
 # parameter samples
 effects_smpls <- spread_draws(
-  logmodel_rr,
+  risk_ratio_model,
   b_study_phaseFirstintervention,
   b_study_phaseSecondintervention
-) %>%
-  mutate(
-    b_study_phaseBaseline = 0
-  ) %>%
+)
+effects <- effects_smpls %>%
   pivot_longer(
     starts_with("b_"),
     names_to = "parameter",
@@ -208,450 +606,673 @@ effects_smpls <- spread_draws(
   ) %>%
   mutate(
     study_phase = case_when(
-      parameter == "b_study_phaseBaseline" ~ "Baseline",
       parameter == "b_study_phaseFirstintervention" ~ "First intervention",
       parameter == "b_study_phaseSecondintervention" ~ "Second intervention"
     ),
     study_phase = factor(
       study_phase,
-      levels = c("Baseline", "First intervention", "Second intervention")
+      levels = c("First intervention", "Second intervention")
     ),
     rr = exp(value),
-    change = rr - 1
-  )
+    change = rr - 1,
+    change = -100 * change
+  ) %>%
+  group_by(study_phase) %>%
+  summarise(
+    median = median(change),
+    lower = quantile(change, 0.025),
+    upper = quantile(change, 0.975),
+    lower_80 = quantile(change, 0.1),
+    upper_80 = quantile(change, 0.9),
+    lower_50 = quantile(change, 0.25),
+    upper_50 = quantile(change, 0.75)
+  ) %>%
+  ungroup()
 
-# plot effects
-effects_pl <- effects_smpls %>%
-  ggplot(aes(x = study_phase, y = change)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-  stat_interval(.width = c(0.5, 0.8, 0.95)) +
-  stat_summary(
-    fun = mean, geom = "point", shape = 23, size = 2,
-    colour = "black", fill = "white"
-  ) +
-  scale_y_continuous(
-    breaks = scales::breaks_width(0.1),
-    labels = function(x) x * 100
-  ) +
-  scale_color_brewer(
-    labels = rev(c("50%", "80%", "95%"))
-  ) +
-  scale_x_discrete(
-    labels = c(
-      "Baseline",
-      "1<sup>st</sup> intervention",
-      "2<sup>nd</sup> intervention"
+effects_annotation <- tibble(
+  study_phase = effects$study_phase[1:2],
+  label = c(
+    paste0(
+      round_k(effects$median[1], 0), "%",
+      " (95%-CrI ", round_k(effects$lower[1], 0),
+      "–", round_k(effects$upper[1], 0), ")"
+    ),
+    paste0(
+      round_k(effects$median[2], 0), "%",
+      " (95%-CrI ", round_k(effects$lower[2], 0),
+      "–", round_k(effects$upper[2], 0), ")"
     )
-  ) +
-  labs(
-    colour = "Credible interval",
-    x = "Study phase",
-    y = "Change in infection rsik (%)"
-  ) +
-  theme_custom() +
-  theme(
-    legend.position = c(0, 0),
-    legend.justification = c(0, 0),
-    axis.title.x = element_blank(),
-    axis.text.x = element_markdown(),
-    legend.background = element_rect(fill = "white", color = "black")
-  ) +
-  guides(colour = guide_legend(reverse = TRUE))
-effects_pl
+  ),
+  y = fixed_daily_risk_df %>%
+    group_by(study_phase) %>%
+    summarise(q75 = quantile(adjusted_rate_ratio, 0.75)) %>%
+    pull(q75) %>%
+    .[2:3],
+  x = factor(c("Jul 01", "Jul 16"), levels = levels(fixed_daily_risk_df$date))
+)
 
+rate_diff_pl_with_effects <- rate_diff_pl +
+  geom_label(
+    data = effects_annotation,
+    mapping = aes(
+      x = x, y = y,
+      label = paste0("Estimated reduction:\n", label)
+    ),
+    size = 8 / cm(1),
+    fill = "white", alpha = .4,
+    hjust = -.05, vjust = -0.2
+  )
 save_plot(
-  effects_pl, "results/modelling-intervention-effects.png",
-  w = 8, h = 8
+  rate_diff_pl_with_effects,
+  "results/modelling_adjusted_rate_ratio_over_time_with_effects.png",
+  w = 16, h = 10
 )
 ```
 
 
-## Risk contribution of close proximity 
+### Estimated prevented infections
 
-```{r}
-
-```
-
-```{r load risk data and add covariates}
-# modelling results for variable aer
-data_dir_var <- "modelling-results/variable_aer/"
-folders_var <- list.dirs(data_dir_var, recursive = FALSE, full.names = TRUE)
-mr_variable_aer <- map_dfr(folders_var, function(folder) {
-  date_val <- basename(folder)
-  csv_file <- list.files(folder, pattern = "\\.csv$", full.names = TRUE)
-  df <- read_csv(csv_file)
-  df$date <- as.Date(date_val)
-  df
-}) %>%
-  filter(hour_idx < 12)
-
-# add interventions
-interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
+```{r prevented infections}
+# predict risk ratio under baseline
+new_data <- fixed_daily_risk_df %>%
   mutate(
-    date = as.Date(date),
-    study_phase = factor(
-      study_phase,
-      levels = c("Baseline", "First intervention", "Second intervention")
-    )
+    study_phase = "Baseline",
+    row_id = 1:n()
   )
-mr_variable_aer <- mr_variable_aer %>%
-  left_join(interventions, by = "date")
-
-# add weekday
-mr_variable_aer <- mr_variable_aer %>%
-  mutate(
-    weekday = weekdays(date, abbreviate = TRUE),
-    weekday = factor(
-      weekday,
-      levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-    )
-  )
-
-# add study day
-mr_variable_aer <- mr_variable_aer %>%
-  mutate(study_day = as.numeric(date - min(date)))
-
-# add air exchange rate
-aer_data <- read_csv("data-clean/environmental/air-exchange-rate.csv") %>%
-  mutate(date = as.Date(date)) %>%
-  filter(device == "Aranet4 272D2") %>%
-  dplyr::select(date, aer_tmb) %>%
-  rename(aer = aer_tmb)
-mr_variable_aer <- mr_variable_aer %>%
-  left_join(aer_data, by = "date")
-
-# add tracking features
-files_track <- list.files("data-clean/tracking/features/", full.names = TRUE)
-track_featr <- map_dfr(files_track, read_csv) %>%
-  group_by(date) %>%
-  mutate(sum_hcw = sum(healthcare_worker, na.rm = TRUE)) %>%
-  mutate(healthcare_worker = if_else(
-    sum_hcw == 0, NA, healthcare_worker
-  )) %>%
-  ungroup() %>%
-  dplyr::select(-sum_hcw) %>%
-  rename(
-    proximity_time = close_proximity_time_1.0m,
-    proximity_contacts = close_proximity_contacts_1.0m_60s
-  )
-mr_variable_aer <- mr_variable_aer %>%
-  left_join(track_featr, by = c("new_track_id", "date", "hour_idx"))
-
-# compute risk
-mr_variable_aer <- mr_variable_aer %>%
-  mutate(
-    risk = 1 - exp(-conc_diffusion),
-    hour = hour_idx,
-    inv_aer = 1 / aer
-  )
-```
-
-### Association with daytime and weekday
-
-```{r association time}
-hurdle_contact <- brm(
-  bf(
-    risk ~ offset(duration) + study_day + inv_aer + sqrt(proximity_contacts),
-    hu ~ offset(duration) + study_day + weekday + hour + I(hour^2)
-  ),
-  data = mr_variable_aer,
-  family = hurdle_lognormal(),
-  chains = 4, cores = 4, iter = 1000,
-  seed = 12345
-)
-
-summary(hurdle_contact)
-
-# aggregate risks by daytime
-mr_time <- mr_variable_aer %>%
-  rename(hour = hour_idx) %>%
-  mutate(risk = 1 - exp(-conc_diffusion)) %>%
-  group_by(date, weekday, study_phase, study_day, aer, hour) %>%
-  summarise(
-    inf = sum(risk),
-    duration = sum(duration)
-  ) %>%
-  ungroup() %>%
-  mutate(
-    inf_rate = inf / duration * 3600,
-    inv_aer = 1 / aer
-  )
-
-mr_weekday <- mr_variable_aer %>%
-  mutate(risk = 1 - exp(-conc_diffusion)) %>%
-  group_by(date, weekday, study_phase, study_day, aer) %>%
-  summarise(
-    inf = sum(risk),
-    duration = sum(duration)
-  ) %>%
-  ungroup() %>%
-  mutate(
-    inf_rate = inf / duration * 3600,
-    inv_aer = 1 / aer
-  )
-
-summary(lm(log(inf_rate) ~ study_phase + study_day + weekday + inv_aer, data = mr_weekday))
-summary(lm(inv_aer ~ weekday, data = mr_weekday))
-
-# inspect data
-sum(mr_time$inf_rate == 0) / nrow(mr_time)
-mr_time %>%
-  ggplot(aes(x = factor(hour), y = inf_rate)) +
-  facet_wrap(~weekday, ncol = 3) +
-  geom_boxplot()
-hist(sqrt(mr_time$inf_rate))
-
-mr_time %>%
-  group_by(weekday, hour) %>%
-  summarise(
-    q025 = quantile(inf_rate, 0.025),
-    q25 = quantile(inf_rate, 0.25),
-    q50 = quantile(inf_rate, 0.5),
-    q75 = quantile(inf_rate, 0.75),
-    q975 = quantile(inf_rate, 0.975)
-  ) %>%
-  View()
-
-# regression model
-hurdle_time <- brm(
-  bf(
-    inf_rate ~ study_day + study_phase + weekday + hour + I(hour^2) + inv_aer,
-    hu ~ study_day + study_phase + weekday + hour + I(hour^2) + inv_aer
-  ),
-  data = mr_time,
-  family = hurdle_lognormal(),
-  chains = 4, cores = 4, iter = 1000,
-  seed = 12345
-)
-summary(hurdle_time)
-
-# time grid
-time_grid <- expand.grid(
-  hour = seq(0, 11, by = 1),
-  weekday = levels(mr_time$weekday),
-  study_phase = "Baseline",
-  study_day = 0,
-  inv_aer = 1 / median(mr_time$aer)
-)
-
-# predictions
-time_pred <- posterior_predict(hurdle_time, newdata = time_grid) %>%
-  t() %>%
+pred_rr <- posterior_predict(
+  risk_ratio_model,
+  newdata = new_data
+) %>%
   as.data.frame() %>%
-  bind_cols(time_grid) %>%
+  mutate(sample = 1:n()) %>%
   pivot_longer(
-    -all_of(names(time_grid)),
-    names_to = "draw",
-    values_to = "risk"
+    -sample,
+    names_to = "row_id",
+    values_to = "pred_log_rr"
   ) %>%
-  mutate(draw = as.integer(str_remove(draw, "V")))
+  mutate(
+    row_id = as.integer(gsub("V", "", row_id))
+  )
+
+# compute prevented infections
+prevented_infections_df <- daily_risk_df %>%
+  mutate(row_id = as.integer(factor(date, levels = sort(unique(date))))) %>%
+  left_join(pred_rr, by = "row_id", relationship = "many-to-many") %>%
+  mutate(
+    pred_adjusted_rate_ratio = exp(pred_log_rr),
+    pred_rate_ratio = pred_adjusted_rate_ratio * duration / 3600,
+    pred_infections_diffusion = pred_rate_ratio * infections_mixed,
+    pred_prevented_infections = pred_infections_diffusion - infections_diffusion
+  ) %>%
+  group_by(sim, sample) %>%
+  summarise(
+    infections_diffusion = sum(infections_diffusion),
+    pred_infections_diffusion = sum(pred_infections_diffusion),
+    pred_prevented_infections = sum(pred_prevented_infections),
+    infections_change = 100 * log(
+      pred_infections_diffusion / infections_diffusion
+    )
+  ) %>%
+  ungroup() %>%
+  pivot_longer(
+    contains("infections"),
+    names_to = "model",
+    values_to = "infections"
+  ) %>%
+  mutate(
+    model = recode_factor(
+      model,
+      "pred_prevented_infections" = "**Prevented infections**<br>(intervention effect)",
+      "pred_infections_diffusion" = "**NUM without interventions**<br>(hypothetical scenario)",
+      "infections_diffusion" = "**NUM with interventions**<br>(modelled outcome)",
+      "infections_change" = "Percent change"
+    )
+  )
+
+# summary
+prevented_infections_df_summary <- prevented_infections_df %>%
+  group_by(model) %>%
+  summarise(
+    median = median(infections, na.rm = TRUE),
+    lower = quantile(infections, 0.025, na.rm = TRUE),
+    upper = quantile(infections, 0.975, na.rm = TRUE)
+  ) %>%
+  mutate(
+    label = paste0(
+      "Median: ", round_k(median, 0), " ",
+      "(95%-CrI ", round_k(lower, 0), "–", round_k(upper, 0), ")"
+    )
+  )
+prevented_infections_df_summary
 
 # plot
-time_pl <- time_pred %>%
-  ggplot(aes(x = hour, y = risk, colour = weekday)) +
+prevented_infections_pl <- prevented_infections_df %>%
+  filter(model != "Percent change") %>%
+  ggplot(aes(x = infections, y = model, color = model)) +
   tidybayes::stat_interval(
-    aes(group = hour, alpha = after_stat(factor(.width))),
-    .width = c(0.5, 0.8, 0.95), colour = "gray50"
+    aes(alpha = after_stat(level)),
+    .width = c(.5, .8, .95),
+    point_interval = median_qi
   ) +
-  stat_summary(
-    aes(group = weekday, color = weekday),
-    fun = mean, geom = "line",
+  geom_point(
+    data = prevented_infections_df_summary %>%
+      filter(model != "Percent change"),
+    mapping = aes(x = median),
+    color = "black", size = 2, shape = 23, fill = "white"
   ) +
-  stat_summary(
-    aes(group = weekday, fill = weekday),
-    fun = mean, geom = "point", shape = 23, size = 2, colour = "black"
-  ) +
-  scale_y_continuous(
-    labels = function(x) x,
-    limits = c(0, NA),
-    expand = expansion(mult = c(0.01, 0.01))
-  ) +
-  scale_x_continuous(
-    breaks = 0:12,
-    labels = function(x) x + 6,
-    expand = expansion(add = c(0.05, 0.05))
-  ) +
-  scale_color_paletteer_d(
-    "colRoz::uluru",
-    breaks = levels(mr_time$weekday),
-    name = "Weekday"
-  ) +
-  scale_fill_paletteer_d(
-    "colRoz::uluru",
-    breaks = levels(mr_time$weekday),
-    name = "Weekday"
-  ) +
-  scale_alpha_manual(
-    values = c("0.5" = 0.7, "0.8" = 0.4, "0.95" = 0.1),
-    labels = c("50%", "80%", "95%"),
-    name = "Prediction interval"
-  ) +
-  labs(
-    x = "Daytime (hour)",
-    y = "Predicted infections per 100,000 attendees"
-  ) +
-  theme_custom() +
-  theme(
-    legend.position = c(1, 1),
-    legend.justification = c(1, 1)
-  )
-time_pl
-``` 
-
-
-### Association with the air exchange rate
-
-```{r association aer}
-# aer grid
-aer_grid <- expand.grid(
-  aer = seq(5, 30, by = 2.5),
-  weekday = levels(mr_time$weekday)[6],
-  hour = 6,
-  study_phase = "Baseline",
-  study_day = 0,
-  ptp_z = 0,
-  pcr_z = 0
-) %>%
-  mutate(inv_aer = 1 / aer)
-
-# predictions
-aer_pred <- posterior_predict(hurdle_time, newdata = aer_grid) %>%
-  t() %>%
-  as.data.frame() %>%
-  bind_cols(aer_grid) %>%
-  pivot_longer(
-    -all_of(names(aer_grid)),
-    names_to = "draw",
-    values_to = "risk"
-  ) %>%
-  mutate(draw = as.integer(str_remove(draw, "V")))
-
-# plot
-aer_pl <- aer_pred %>%
-  ggplot(aes(x = aer, y = risk)) +
-  stat_interval(
-    aes(group = aer, alpha = after_stat(factor(.width))),
-    .width = c(0.5, 0.8, 0.95), colour = "gray50"
-  ) +
-  stat_summary(
-    fun = mean, geom = "line", color = "skyblue"
-  ) +
-  stat_summary(
-    aes(group = aer),
-    fun = mean, geom = "point", shape = 23, size = 2,
-    colour = "black", fill = "skyblue"
-  ) +
-  scale_y_continuous(
-    labels = function(x) x * 1e5,
-    limits = c(0, NA),
-    expand = expansion(mult = c(0.01, 0.01))
+  geom_text(
+    data = prevented_infections_df_summary %>%
+      filter(model != "Percent change"),
+    mapping = aes(
+      x = median, y = model,
+      label = label
+    ),
+    hjust = 0, vjust = -1,
+    size = 8 / cm(1)
   ) +
   scale_x_continuous(
-    limits = c(5, 30),
-    breaks = seq(5, 30, by = 5),
-    expand = expansion(add = c(0.5, 0.5))
+    name = "Estimated expected number of new Mtb infections over the study",
+    expand = expansion(mult = c(0, 0.01)),
+    limits = c(0, NA)
   ) +
-  scale_alpha_manual(
-    values = c("0.5" = 0.7, "0.8" = 0.4, "0.95" = 0.1),
-    labels = c("50%", "80%", "95%"),
-    name = "Prediction interval"
-  ) +
-  labs(
-    x = "Air exchange rate (h<sup>-1</sup>)",
-    y = "Predicted infections per 100,000 attendees"
-  ) +
+  scale_color_paletteer_d("wesanderson::AsteroidCity1") +
+  ggtitle("B") +
   theme_custom() +
   theme(
-    legend.position = c(1, 1),
-    legend.justification = c(1, 1),
-    axis.title.x = element_markdown()
+    axis.text.y = element_markdown(),
+    axis.title.y = element_blank(),
+    legend.position = "none",
+    plot.title.position = "plot"
   )
-aer_pl
+prevented_infections_pl
+
+# combined plot
+risk_intervention_effect_pl <-
+  (risk_difference_pl + coord_cartesian(xlim = c(0, 425))) +
+  (prevented_infections_pl + coord_cartesian(xlim = c(0, 425))) +
+  plot_layout(ncol = 1, heights = c(8, 8))
+save_plot(
+  risk_intervention_effect_pl,
+  "results/modelling_risk_and_effects.png",
+  w = 16, h = 18
+)
 ```
 
 
-### Association with contact patterns
+## Association with spatial density
 
-```{r association contact}
-contact_grid <- expand.grid(
-  proximity_contacts_rate = seq(10, 60, by = 10),
-  proximity_time_prop = c(0.4, 0.75, 1),
-  weekday = levels(mr_time$weekday)[6],
-  hour = 6,
-  study_phase = "Baseline",
-  study_day = 0,
-  inv_aer = 1 / median(mr_time$aer)
-) %>%
-  mutate(
-    pcr_z = (proximity_contacts_rate - mean(mr_time$proximity_contacts_rate, na.rm = TRUE)) /
-      sd(mr_time$proximity_contacts_rate, na.rm = TRUE),
-    ptp_z = (proximity_time_prop - mean(mr_time$proximity_time_prop, na.rm = TRUE)) /
-      sd(mr_time$proximity_time_prop, na.rm = TRUE)
-  )
+```{r add spatial density measures}
+# adjusted rate by day
+fixed_daily_risk_df <- fixed_daily_risk_df %>%
+  mutate(pt_hours = duration / 3600)
 
-# predictions
-contact_pred <- posterior_predict(hurdle_time, newdata = contact_grid) %>%
-  t() %>%
-  as.data.frame() %>%
-  bind_cols(contact_grid) %>%
-  pivot_longer(
-    -all_of(names(contact_grid)),
-    names_to = "draw",
-    values_to = "risk"
+# add density
+files_occupancy <- list.files("data-clean/tracking/occupancy",
+  pattern = "\\.csv$", full.names = TRUE
+)
+occupancy_df <- mclapply(files_occupancy, function(file) {
+  data.table::fread(file) %>%
+    mutate(date = as.Date(basename(file)))
+}, mc.cores = 2)
+occupancy_df <- do.call(rbind, occupancy_df)
+daily_density_df <- occupancy_df %>%
+  group_by(date) %>%
+  summarise(
+    gini = median(gini_kde, na.rm = TRUE),
+    entropy = median(entropy_kde, na.rm = TRUE)
   ) %>%
-  mutate(draw = as.integer(str_remove(draw, "V"))) %>%
+  ungroup()
+fixed_daily_risk_df <- fixed_daily_risk_df %>%
+  left_join(daily_density_df, by = "date")
+```
+
+```{r association spatial density gini}
+# model gini
+risk_gini_model <- brm(
+  log(adjusted_rate_ratio) ~ log(gini) + weekday,
+  data = fixed_daily_risk_df,
+  family = gaussian(),
+  chains = 4, cores = 4, iter = 500,
+  seed = 12345
+)
+summary(risk_gini_model)
+gini_assoc_smpls <- spread_draws(
+  risk_gini_model,
+  b_loggini
+)
+gini_assoc_smpls %>%
+  median_qi(b_loggini) %>%
+  mutate_if(is.numeric, ~ round_k(.x, 1))
+```
+
+```{r association spatial density entropy}
+# model entropy
+risk_entropy_model <- brm(
+  log(adjusted_rate_ratio) ~ entropy + weekday,
+  data = fixed_daily_risk_df %>%
+    mutate(entropy = scale(entropy)),
+  family = gaussian(),
+  chains = 4, cores = 4, iter = 500,
+  seed = 12345
+)
+summary(risk_entropy_model)
+spread_draws(
+  risk_entropy_model,
+  b_entropy
+) %>%
+  median_qi(b_entropy) %>%
+  mutate_if(is.numeric, ~ round_k(-100 * .x, 0))
+```
+
+
+## Risk of infection by infectiousness assumption
+
+```{r risk by infectiousness}
+# files
+all_equal_infectious_files <- list.files(
+  "modelling-results/uncertain_all_equal_infectious/",
+  pattern = "\\.csv$", full.names = TRUE, recursive = TRUE
+)
+sims <- as.numeric(gsub(
+  ".*_sim_(\\d+)\\.csv$", "\\1",
+  all_equal_infectious_files
+))
+all_equal_infectious_files <- all_equal_infectious_files[sims <= 100]
+only_conf_infectious_files <- list.files(
+  "modelling-results/uncertain_only_confirmed_infectious/",
+  pattern = "\\.csv$", full.names = TRUE, recursive = TRUE
+)
+conf_more_infectious_files <- list.files(
+  "modelling-results/uncertain_confirmed_more_infectious/",
+  pattern = "\\.csv$", full.names = TRUE, recursive = TRUE
+)
+hiv_more_infectious_files <- list.files(
+  "modelling-results/uncertain_hiv_more_infectious/",
+  pattern = "\\.csv$", full.names = TRUE, recursive = TRUE
+)
+
+# read data with risks
+read_number_of_infections <- function(f) {
+  sim <- str_extract(basename(f), "(?<=_sim_)\\d+")
+  date <- str_extract(basename(dirname(f)), "\\d{4}-\\d{2}-\\d{2}")
+  df <- read_csv(f) %>%
+    filter(hour_idx < 12) %>%
+    mutate(risk_diffusion = 1 - exp(-conc_diffusion)) %>%
+    summarise(infections = sum(risk_diffusion)) %>%
+    mutate(sim = as.integer(sim), date = as.Date(date)) %>%
+    dplyr::select(sim, date, infections)
+  return(df)
+}
+
+all_equal_infectious_df <- map_dfr(
+  all_equal_infectious_files,
+  read_number_of_infections
+)
+only_conf_infectious_df <- map_dfr(
+  only_conf_infectious_files,
+  read_number_of_infections
+)
+conf_more_infectious_df <- map_dfr(
+  conf_more_infectious_files,
+  read_number_of_infections
+)
+hiv_more_infectious_df <- map_dfr(
+  hiv_more_infectious_files,
+  read_number_of_infections
+)
+
+uncertain_df <- bind_rows(
+  all_equal_infectious_df %>%
+    mutate(assumption = "**Main analysis**<br>Presumptive & confirmed TB equal infectious"),
+  only_conf_infectious_df %>%
+    mutate(assumption = "**<Scenario 1**<br>Only confirmed TB infectious"),
+  conf_more_infectious_df %>%
+    mutate(assumption = "**Scenario 2**<br>Confirmed TB more infectious"),
+  hiv_more_infectious_df %>%
+    mutate(assumption = "**Scenario 3**<br>HIV-positive more infectious")
+) %>%
+  mutate(assumption = factor(assumption, levels = rev(unique(assumption)))) %>%
+  group_by(sim, assumption) %>%
+  summarise(
+    infections = sum(infections)
+  ) %>%
+  ungroup()
+
+# relative changes compared to all equal infectiousness
+uncertain_ratio_df <- uncertain_df %>%
+  filter(assumption != levels(assumption)[1]) %>%
+  left_join(
+    uncertain_df %>%
+      filter(assumption == levels(assumption)[1]) %>%
+      dplyr::select(sim, base_infections = infections),
+    by = "sim"
+  ) %>%
   mutate(
-    proximity_time_prop = factor(
-      proximity_time_prop * 100,
-      levels = sort(unique(proximity_time_prop * 100)),
+    infections_change = 100 * log(infections / base_infections)
+  )
+uncertain_ratio_df_summary <- uncertain_ratio_df %>%
+  group_by(assumption) %>%
+  summarise(
+    median = median(infections_change),
+    lower = quantile(infections_change, 0.025),
+    upper = quantile(infections_change, 0.975)
+  ) %>%
+  ungroup() %>%
+  mutate_if(is.numeric, ~ round_k(.x, 0))
+uncertain_ratio_df_summary
+
+
+# compare number of infections
+uncertain_df_summary <- uncertain_df %>%
+  group_by(assumption) %>%
+  summarise(
+    median = median(infections),
+    lower = quantile(infections, 0.025),
+    upper = quantile(infections, 0.975)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    label = paste0(
+      "Median: ", round_k(median, 0), " ",
+      "(95%-CrI ", round_k(lower, 0), "-", round_k(upper, 0), ")"
     )
   )
 
-# plot
-contact_pl <- contact_pred %>%
-  ggplot(aes(x = proximity_contacts_rate, y = risk, colour = proximity_time_prop)) +
-  stat_interval(
-    aes(group = proximity_contacts_rate, alpha = after_stat(factor(.width))),
-    .width = c(0.5, 0.8, 0.95), colour = "gray50"
+# plot comparison
+uncertain_summary_pl <- uncertain_df %>%
+  ggplot(aes(x = infections, y = assumption, color = assumption)) +
+  tidybayes::stat_interval(
+    aes(alpha = after_stat(level)),
+    .width = c(.5, .8, .95),
+    point_interval = median_qi
   ) +
-  stat_summary(
-    aes(group = proximity_time_prop, color = proximity_time_prop),
-    fun = mean, geom = "line"
+  geom_point(
+    data = uncertain_df_summary,
+    mapping = aes(x = median),
+    color = "black", size = 2, shape = 23, fill = "white"
   ) +
-  stat_summary(
-    aes(group = proximity_time_prop, fill = proximity_time_prop),
-    fun = mean, geom = "point", shape = 23, size = 2,
-    colour = "black"
+  geom_text(
+    data = uncertain_df_summary,
+    mapping = aes(
+      x = median,
+      label = label
+    ),
+    hjust = 0, vjust = -1,
+    size = 8 / cm(1)
   ) +
-  scale_y_continuous(
-    labels = function(x) x * 1e5,
-    limits = c(0, NA),
-    expand = expansion(mult = c(0.01, 0.01))
-  ) +
-  scale_color_paletteer_d(
-    "NineteenEightyR::miami1",
-    name = "Time in close proximity (%)",
-    breaks = levels(contact_pred$proximity_time_prop)
+  scale_x_continuous(
+    name = "Estimated expected number of new Mtb infections over the study",
+    expand = expansion(mult = c(0, 0.01)),
+    limits = c(0, NA)
   ) +
   scale_fill_paletteer_d(
-    "NineteenEightyR::miami1",
-    name = "Time in close proximity (%)",
-    breaks = levels(contact_pred$proximity_time_prop)
-  ) +
-  scale_alpha_manual(
-    values = c("0.5" = 0.7, "0.8" = 0.4, "0.95" = 0.1),
-    labels = c("50%", "80%", "95%"),
-    name = "Prediction interval"
-  ) +
-  labs(
-    x = "Air exchange rate (h<sup>-1</sup>)",
-    y = "Predicted infections per 100,000 attendees"
+    "tvthemes::Bismuth"
   ) +
   theme_custom() +
   theme(
-    legend.position = c(0, 1),
-    legend.justification = c(0, 1),
-    axis.title.x = element_markdown()
+    axis.title.y = element_blank(),
+    axis.text.y = element_markdown(),
+    legend.position = "none"
   )
-contact_pl
+save_plot(
+  uncertain_summary_pl,
+  "results/modelling_risk_by_infectiousness_assumptions.png",
+  w = 16, h = 6
+)
+```
+
+
+## Stratification by gender and healtcare worker status
+
+```{r association gender}
+# risk aggregate by gender
+gender_hourly_risk_df <- daily_person_risk_df %>%
+  filter(!is.na(female)) %>%
+  group_by(female, sim) %>%
+  summarise(
+    infections_diffusion = sum(infections_diffusion),
+    duration = sum(duration)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    rate_diffusion = infections_diffusion / duration * 3600
+  )
+
+# risk aggregate by healthcare worker status
+hcw_hourly_risk_df <- daily_person_risk_df %>%
+  filter(!is.na(healthcare_worker)) %>%
+  group_by(healthcare_worker, sim) %>%
+  summarise(
+    infections_diffusion = sum(infections_diffusion),
+    duration = sum(duration)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    rate_diffusion = infections_diffusion / duration * 3600
+  )
+
+# overall risk aggregate
+overall_hourly_risk_df <- daily_person_risk_df %>%
+  group_by(sim) %>%
+  summarise(
+    infections_diffusion = sum(infections_diffusion),
+    duration = sum(duration)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    rate_diffusion = infections_diffusion / duration * 3600
+  )
+
+# combine
+hourly_risk_df <- bind_rows(
+  overall_hourly_risk_df %>%
+    mutate(group = "Overall"),
+  gender_hourly_risk_df %>%
+    mutate(group = ifelse(female == 1,
+      "Female", "Male"
+    )),
+  hcw_hourly_risk_df %>%
+    mutate(
+      group = ifelse(healthcare_worker == 1,
+        "Healthcare worker", "Non-healthcare worker"
+      )
+    )
+) %>%
+  mutate(
+    group = factor(
+      group,
+      levels = c(
+        "Overall", "Female", "Male",
+        "Healthcare worker", "Non-healthcare worker"
+      )
+    )
+  )
+
+# hourly risk summary
+hourly_risk_tbl <- hourly_risk_df %>%
+  group_by(group) %>%
+  median_qi(rate_diffusion) %>%
+  mutate_if(is.numeric, ~ round_k(100 * .x, 2)) %>%
+  mutate(
+    rate_label = paste0(
+      rate_diffusion, " (",
+      .lower, "-", .upper, ")"
+    )
+  ) %>%
+  dplyr::select(group, rate_label)
+
+# hours to first infection
+hourly_risk_df <- hourly_risk_df %>%
+  mutate(hours_to_first_infection = 1 / rate_diffusion)
+
+# days till first infection summary
+time_to_first_infection_tbl <- hourly_risk_df %>%
+  group_by(group) %>%
+  median_qi(hours_to_first_infection) %>%
+  mutate_if(is.numeric, ~ round_k(.x / 24, 0)) %>%
+  mutate(
+    time_label = paste0(
+      hours_to_first_infection, " (",
+      .lower, "-", .upper, ")"
+    )
+  ) %>%
+  dplyr::select(group, time_label)
+
+# rate ratios by study phase for gender
+gender_rate_ratio_by_phase_df <- fixed_risk_df %>%
+  filter(!is.na(female)) %>%
+  group_by(date, weekday, study_phase, female) %>%
+  summarise(
+    infections_diffusion = sum(infections_diffusion),
+    infections_mixed = sum(infections_mixed),
+    duration = sum(duration)
+  ) %>%
+  ungroup() %>%
+  mutate(ratio = infections_diffusion / infections_mixed) %>%
+  group_by(date, study_phase) %>%
+  filter(n() > 1) %>%
+  summarise(
+    rate_ratio = ratio[female == 1] / ratio[female == 0]
+  ) %>%
+  ungroup()
+
+# compare rate ratios by study phase by gender
+gender_rate_ratio_model <- brm(
+  log(rate_ratio) ~ study_phase,
+  data = gender_rate_ratio_by_phase_df,
+  family = gaussian(),
+  chains = 4, cores = 4, iter = 2000,
+  seed = 12345
+)
+summary(gender_rate_ratio_model)
+rate_ratio_gender_tbl <- spread_draws(
+  gender_rate_ratio_model,
+  b_Intercept,
+  b_study_phaseFirstintervention,
+  b_study_phaseSecondintervention
+) %>%
+  mutate(
+    across(starts_with("b_"), ~ exp(.x) - 1)
+  ) %>%
+  dplyr::select(starts_with("b_")) %>%
+  pivot_longer(
+    everything(),
+    names_to = "parameter",
+    values_to = "change"
+  ) %>%
+  group_by(parameter) %>%
+  median_qi(change) %>%
+  ungroup() %>%
+  mutate_if(is.numeric, ~ round_k(100 * .x, 0)) %>%
+  mutate(
+    parameter = recode_factor(
+      parameter,
+      "b_Intercept" = "Baseline",
+      "b_study_phaseFirstintervention" = "First intervention",
+      "b_study_phaseSecondintervention" = "Second intervention"
+    ),
+    rate_ratio_label = paste0(
+      change, " (",
+      .lower, "-", .upper, ")"
+    )
+  ) %>%
+  dplyr::select(parameter, rate_ratio_label)
+
+# rate ratios by study_phase for healthcare worker status
+hcw_rate_ratio_by_phase_df <- fixed_risk_df %>%
+  filter(!is.na(healthcare_worker)) %>%
+  group_by(date, weekday, study_phase, healthcare_worker) %>%
+  summarise(
+    infections_diffusion = sum(infections_diffusion),
+    infections_mixed = sum(infections_mixed),
+    duration = sum(duration)
+  ) %>%
+  ungroup() %>%
+  mutate(ratio = infections_diffusion / infections_mixed) %>%
+  group_by(date, study_phase) %>%
+  filter(n() > 1) %>%
+  summarise(
+    rate_ratio = ratio[healthcare_worker == 1] / ratio[healthcare_worker == 0]
+  ) %>%
+  ungroup()
+
+# compare rate ratios by study phase
+hcw_rate_ratio_model <- brm(
+  log(rate_ratio) ~ study_phase,
+  data = hcw_rate_ratio_by_phase_df,
+  family = gaussian(),
+  chains = 4, cores = 4, iter = 2000,
+  seed = 12345
+)
+summary(hcw_rate_ratio_model)
+
+rate_ratio_hcw_tbl <- spread_draws(
+  hcw_rate_ratio_model,
+  b_Intercept,
+  b_study_phaseFirstintervention,
+  b_study_phaseSecondintervention
+) %>%
+  mutate(
+    across(starts_with("b_"), ~ exp(.x) - 1)
+  ) %>%
+  dplyr::select(starts_with("b_")) %>%
+  pivot_longer(
+    everything(),
+    names_to = "parameter",
+    values_to = "change"
+  ) %>%
+  group_by(parameter) %>%
+  median_qi(change) %>%
+  ungroup() %>%
+  mutate_if(is.numeric, ~ round_k(100 * .x, 0)) %>%
+  mutate(
+    parameter = recode_factor(
+      parameter,
+      "b_Intercept" = "Baseline",
+      "b_study_phaseFirstintervention" = "First intervention",
+      "b_study_phaseSecondintervention" = "Second intervention"
+    ),
+    rate_ratio_label = paste0(
+      change, " (",
+      .lower, "-", .upper, ")"
+    )
+  ) %>%
+  dplyr::select(parameter, rate_ratio_label)
+
+# combine rate ratio tables
+rate_ratio_tables <- bind_rows(
+  rate_ratio_gender_tbl %>%
+    mutate(group = "Female"),
+  rate_ratio_hcw_tbl %>%
+    mutate(group = "Healthcare worker")
+) %>%
+  pivot_wider(
+    names_from = parameter,
+    values_from = rate_ratio_label
+  )
+
+# combine all tables
+strata_tbl <- bind_cols(
+  hourly_risk_tbl,
+  time_to_first_infection_tbl %>%
+    dplyr::select(-group)
+) %>%
+  left_join(
+    rate_ratio_tables,
+    by = c("group" = "group")
+  ) %>%
+  mutate_all(~ replace_na(.x, "-"))
+
+# save table
+write.csv(
+  strata_tbl,
+  "results/modelling_risk_stratified_by_gender_and_hcw_status.csv",
+  row.names = FALSE
+)
+
+# print table
+strata_tbl %>%
+  knitr::kable(
+    caption = "Estimated hourly risk of Mtb infection, time to first infection, and rate ratios by study phase, stratified by gender and healthcare worker status."
+  )
 ```

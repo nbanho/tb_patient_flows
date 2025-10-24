@@ -1,8 +1,9 @@
 import pandas as pd
 import os
-from datetime import datetime
+import time
+from read_tracking_linked_data import read_linked_tracking_data
 
-def compute_total_time_in_clinic(date):
+def compute_duration(date):
     """
     Computes the total time spent in the clinic for each track_id in the dataframe.
     
@@ -13,32 +14,15 @@ def compute_total_time_in_clinic(date):
     pd.DataFrame: DataFrame with 'track_id' and 'total_time_in_clinic' columns.
     """
     
-    # Construct file paths
-    base_path = 'data-clean/tracking/'
-    unlinked_file = os.path.join(base_path, 'unlinked', f'{date}.csv')
-    linked_file = os.path.join(base_path, 'linked', f'{date}.csv')
-    
-    # Read the unlinked data
-    df = pd.read_csv(unlinked_file, usecols=['time', 'track_id', 'position_x', 'position_y'])
-    
-    # Check if the linked-tb file exists and merge if it does
-    linked_df = pd.read_csv(linked_file)
-    linked_df.rename(columns={'track_id': 'new_track_id', 'raw_track_id': 'track_id'}, inplace=True)
-    df = pd.merge(df, linked_df, on='track_id')
-    
-    # Drop the old track_id column and rename new_track_id to track_id
-    df.drop(columns=['track_id'], inplace=True)
-    df.rename(columns={'new_track_id': 'track_id'}, inplace=True)
-    
-    # Convert unix timestamp to datetime
-    df['time'] = pd.to_datetime(df['time'], unit='ms')
+    # Read data
+    df = read_linked_tracking_data(date)
     
     # Compute the total time spent in the clinic for each track_id
-    total_time = df.groupby('track_id')['time'].agg(lambda x: (x.max() - x.min()).total_seconds())
+    total_time = df.groupby('new_track_id')['time'].agg(lambda x: x.max() - x.min())
     
     # Convert the result to a DataFrame
     result_df = total_time.reset_index()
-    result_df.columns = ['track_id', 'total_time_in_clinic']
+    result_df.columns = ['new_track_id', 'duration']
     result_df['date'] = date
     return result_df
 
@@ -60,7 +44,9 @@ def process_all_dates():
     # Process each file
     for file in files:
         date = file.replace('.csv', '')
-        df = compute_total_time_in_clinic(date)
+        t0 = time.time()
+        df = compute_duration(date)
+        print(f'compute_duration {time.time() - t0:.2f} seconds')
         all_data.append(df)
     
     # Combine all DataFrames into a single DataFrame

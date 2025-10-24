@@ -1,8 +1,8 @@
 from concurrent.futures import ProcessPoolExecutor
 import pandas as pd
-from shapely.geometry import Point, Polygon
 import numpy as np
 import os
+from read_tracking_linked_data import read_linked_tracking_data, pad_track_data
 from numba import njit
 import time
 from scipy.spatial import cKDTree
@@ -36,35 +36,6 @@ dates = [
 #     )
 # ]
 # dates = dates[0:1]
-
-# Tracking data
-dtypes = {
-    'time': 'int64',       # since it's ms since epoch
-    'track_id': 'int32',
-    'position_x': 'float32',
-    'position_y': 'float32'
-}
-start_seconds = 6 * 3600  # 06:00:00 in seconds
-def read_linked_tracking_data(date):
-    unlinked_file = os.path.join(base_path, 'unlinked', f'{date}.csv')
-    linked_file = os.path.join(base_path, 'linked-clinical', f'{date}.csv')
-    df = pd.read_csv(unlinked_file, usecols=list(dtypes.keys()), dtype=dtypes)
-    linked_df = pd.read_csv(linked_file, dtype={'raw_track_id': 'int32', 'new_track_id': 'int32'})
-    df.rename(columns={'track_id': 'raw_track_id'}, inplace=True)
-    df.sort_values('raw_track_id', inplace=True)
-    linked_df.sort_values('raw_track_id', inplace=True)
-    df = pd.merge(df, linked_df, on='raw_track_id', how='inner', sort=False)
-    ts = pd.to_datetime(df['time'], unit='ms')
-    seconds_since_midnight = ts.dt.hour * 3600 + ts.dt.minute * 60 + ts.dt.second
-    start_seconds = 6 * 3600
-    df['time_int'] = (seconds_since_midnight - start_seconds).astype(int)
-    df.drop(columns=['time'], inplace=True)
-    df.rename(columns={'time_int': 'time'}, inplace=True)
-    df = (df.groupby(['time', 'new_track_id'], as_index=False)
-        .agg(position_x=('position_x', 'mean'),
-             position_y=('position_y', 'mean'), 
-             clinic_id=('clinic_id', 'first')))
-    return df
 
 # Grid coordinates
 mask = np.load('data-clean/building/building-grid-mask.npy')
@@ -119,6 +90,7 @@ def process_date(date):
     # Load and merge data and compute time integer
     start_comp_time = time.time()
     df = read_linked_tracking_data(date)
+    df = pad_track_data(df)
     print(f"Read data for {date} in {time.time() - start_comp_time:.2f} seconds")
     
     # Determine cell indices

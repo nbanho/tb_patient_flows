@@ -1,0 +1,17 @@
+# fixed parameters with all equal infectious
+python3 modelling/run_model.py --name "fixed_all_equal_infectious" --date "all" --aer "8.0" --inact_rate "1.0" --settl_rate "1.5" --quanta_rate "(1.08, 2.81)" 
+
+# uncertain parameters with all equal infectious
+python3 modelling/run_model.py --name "uncertain_all_equal_infectious" --date "all" --sim "(1,1000)"  
+
+# fixed parameters with only confirmed TB cases
+python3 modelling/run_model.py --name "uncertain_only_confirmed_infectious" --date "all" --sim "(1,100)" --quanta_rate_presumptive_mult "0.0" 
+
+# fixed parameters with confirmed TB cases more infectious
+python3 modelling/run_model.py --name "uncertain_confirmed_more_infectious" --date "all" --sim "(1,100)" --quanta_rate_confirmed_mult "8.0"
+
+# fixed parameters with HIV-positive individuals more infectious
+python3 modelling/run_model.py --name "uncertain_hiv_more_infectious" --date "all" --sim "(1,100)" --quanta_rate_hiv_mult "6.0"
+
+# uncertain parameters and variable air exchange rate for a specific date
+python3 modelling/run_model.py --name "uncertain_all_equal_infectious" --date "2024-06-26" --sim "(1,1000)"  

@@ -8,6 +8,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 library(tidyverse)
 library(lubridate)
+library(ggpubr)
 
 source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotting.R")
 source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
@@ -28,22 +29,98 @@ co2_df <- read_csv("data-clean/environmental/co2-temp-humidity.csv") %>%
     )
   )
 
-# descriptive summaries
-co2_df %>%
+# add interventions
+interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
+  mutate(
+    date = as.Date(date),
+    study_phase = factor(
+      study_phase,
+      levels = c("Baseline", "First intervention", "Second intervention")
+    )
+  )
+co2_df <- co2_df %>%
+  left_join(interventions, by = "date")
+aer_df <- aer_df %>%
+  left_join(interventions, by = "date")
+```
+
+
+## Descriptive summaries
+
+```{r descriptive summaries}
+# co2
+co2_summary <- co2_df %>%
   filter(device == "Aranet4 272D2") %>%
   summarise(
     median_co2 = median(co2, na.rm = TRUE),
     low_co2 = quantile(co2, 0.25, na.rm = TRUE),
     upper_co2 = quantile(co2, 0.75, na.rm = TRUE)
   )
-aer_df %>%
+co2_summary
+co2_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  group_by(study_phase) %>%
+  summarise(
+    median_temp = median(co2, na.rm = TRUE),
+    low_temp = quantile(co2, 0.25, na.rm = TRUE),
+    upper_temp = quantile(co2, 0.75, na.rm = TRUE)
+  )
+
+# temperature
+co2_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  summarise(
+    median_temp = median(temp, na.rm = TRUE),
+    low_temp = quantile(temp, 0.25, na.rm = TRUE),
+    upper_temp = quantile(temp, 0.75, na.rm = TRUE)
+  )
+co2_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  group_by(study_phase) %>%
+  summarise(
+    median_temp = median(temp, na.rm = TRUE),
+    low_temp = quantile(temp, 0.25, na.rm = TRUE),
+    upper_temp = quantile(temp, 0.75, na.rm = TRUE)
+  )
+
+# humidity
+co2_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  summarise(
+    median_hum = median(humidity, na.rm = TRUE),
+    low_hum = quantile(humidity, 0.25, na.rm = TRUE),
+    upper_hum = quantile(humidity, 0.75, na.rm = TRUE)
+  )
+co2_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  group_by(study_phase) %>%
+  summarise(
+    median_hum = median(humidity, na.rm = TRUE),
+    low_hum = quantile(humidity, 0.25, na.rm = TRUE),
+    upper_hum = quantile(humidity, 0.75, na.rm = TRUE)
+  )
+
+# air exchange rate
+aer_summary <- aer_df %>%
   filter(device == "Aranet4 272D2") %>%
   summarise(
     median_aer = median(aer_tmb, na.rm = TRUE),
     low_aer = quantile(aer_tmb, 0.25, na.rm = TRUE),
     upper_aer = quantile(aer_tmb, 0.75, na.rm = TRUE)
-  )
+  ) %>%
+  mutate_all(~ round(.x, 1))
+aer_summary
+aer_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  group_by(study_phase) %>%
+  summarise(
+    median_aer = median(aer_tmb, na.rm = TRUE),
+    low_aer = quantile(aer_tmb, 0.25, na.rm = TRUE),
+    upper_aer = quantile(aer_tmb, 0.75, na.rm = TRUE)
+  ) %>%
+  mutate_if(is.numeric, ~ round(.x, 1))
 ```
+
 
 ## CO2 over time
 
@@ -58,6 +135,12 @@ daytime_co2_df <- co2_df %>%
     .groups = "drop"
   )
 
+co2_annotation <- paste0(
+  "Median: ", round_k(co2_summary$median_co2, 0), " ppm",
+  " (IQR ", round_k(co2_summary$low_co2, 0), "-",
+  round_k(co2_summary$upper_co2, 0), ")"
+)
+
 co2_pl <- ggplot(daytime_co2_df, aes(x = time, y = mid)) +
   geom_line(
     data = filter(co2_df, device == "Aranet4 272D2"),
@@ -68,6 +151,12 @@ co2_pl <- ggplot(daytime_co2_df, aes(x = time, y = mid)) +
     fill = "grey50", alpha = 0.5
   ) +
   geom_line(color = "black", linewidth = .3) +
+  # annotate(
+  #   "text",
+  #   x = hms::as_hms("18:00:00"), y = 970,
+  #   label = co2_annotation,
+  #   hjust = 1.025, vjust = 1, size = 8 / cm(1)
+  # ) +
   scale_y_continuous(
     name = "CO<sub>2</sub> (ppm)",
     breaks = seq(200, 2000, by = 200),
@@ -93,67 +182,165 @@ co2_pl <- ggplot(daytime_co2_df, aes(x = time, y = mid)) +
     )
   )
 saveRDS(co2_pl, "results/environmental_co2_over_time.rds")
+```
+
+
+## Correlation between CO2 measurements
+
+```{r correlation co2 measurements}
+# co2 summary by device
+co2_by_device_df <- co2_df %>%
+  group_by(time, device) %>%
+  summarise(
+    mid = median(co2, na.rm = TRUE),
+    .lower = quantile(co2, 0.25, na.rm = TRUE),
+    .upper = quantile(co2, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ungroup()
+
+# correlation annotation
+paired_co2_df <- co2_df %>%
+  group_by(date, time, device) %>%
+  slice(1) %>%
+  ungroup() %>%
+  pivot_wider(
+    id_cols = c(date, time),
+    names_from = device,
+    values_from = co2
+  ) %>%
+  dplyr::select(`Aranet4 272D2`, `Aranet4 25247`)
+co2_rho <- cor.test(
+  paired_co2_df$`Aranet4 272D2`,
+  paired_co2_df$`Aranet4 25247`,
+  method = "pearson",
+  use = "pairwise.complete.obs"
+)
+co2_correlation_annotate <- paste0(
+  "Pearson's r: ", round_k(co2_rho$estimate, 2),
+  " (p-value <0.001)"
+)
+
+co2_by_device_pl <- ggplot(
+  co2_by_device_df,
+  aes(x = time, y = mid, group = device)
+) +
+  geom_ribbon(aes(ymin = .lower, ymax = .upper, fill = device),
+    alpha = 0.5
+  ) +
+  geom_line(aes(color = device), linewidth = .3) +
+  annotate(
+    "text",
+    x = hms::as_hms("18:00:00"), y = 970,
+    label = co2_correlation_annotate,
+    hjust = 1.025, vjust = 1, size = 8 / cm(1)
+  ) +
+  scale_y_continuous(
+    name = "CO<sub>2</sub> (ppm)",
+    breaks = seq(200, 2000, by = 200),
+    expand = expansion(mult = c(0, 0.01)),
+    limits = c(min(co2_df$co2, na.rm = TRUE), max(co2_df$co2, na.rm = TRUE))
+  ) +
+  scale_x_time(
+    breaks = hms::as_hms(c(
+      "06:00:00", "08:00:00", "10:00:00", "12:00:00",
+      "14:00:00", "16:00:00", "18:00:00"
+    )),
+    labels = c("06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00"),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  scale_colour_brewer(
+    type = "qual", palette = 2,
+    labels = c("AQM 1", "AQM 2"),
+  ) +
+  scale_fill_brewer(
+    type = "qual", palette = 2,
+    labels = c("AQM 1", "AQM 2"),
+  ) +
+  theme_custom() +
+  theme(
+    legend.position = c(0.01, 0.95),
+    legend.justification = c(0.01, 0.95),
+    legend.background = element_rect(
+      fill = "white", color = "black", linewidth = 0.4
+    ),
+    legend.direction = "vertical",
+    legend.box = "horizontal",
+    legend.margin = margin(l = 3, t = 3, b = 3, r = 3),
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = ggtext::element_markdown(),
+    plot.margin = margin(r = 12, t = 12)
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(linewidth = .66, order = 2)
+    )
+  )
+
 save_plot(
-  co2_pl, "results/environmental_co2_over_time.png",
-  width = 16, height = 10
+  co2_by_device_pl,
+  "results/environmental_co2_over_time_by_device.png",
+  w = 16, h = 10
 )
 ```
 
 
-## Ventilation over time
+### Air exchange rate by model
 
-```{r ventilation over time}
-sub_aer_df <- aer_df %>%
-  filter(device == "Aranet4 272D2")
-avg_aer_df <- sub_aer_df %>%
-  summarise(
-    mid = mean(aer_tmb, na.rm = TRUE),
-    .lower = quantile(aer_tmb, 0.25, na.rm = TRUE),
-    .upper = quantile(aer_tmb, 0.75, na.rm = TRUE)
+```{r aer by model}
+aer_by_model_df <- aer_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  dplyr::select(date, aer_tmb, aer_ssm) %>%
+  pivot_longer(
+    cols = c(aer_tmb, aer_ssm),
+    names_to = "model",
+    values_to = "aer"
+  ) %>%
+  mutate(
+    model = recode_factor(model, !!!c(
+      "aer_tmb" = "Transient mass balance model",
+      "aer_ssm" = "Steady state model"
+    ))
   )
 
-aer_pl <- ggplot() +
-  geom_point(
-    data = sub_aer_df,
-    mapping = aes(x = date, y = aer_tmb),
-    fill = "lightblue", shape = 21, size = 1
+# Compute p-value manually
+tt <- t.test(aer ~ model, data = aer_by_model_df)
+p_lab <- paste0("p = ", format.pval(tt$p.value, digits = 2, eps = .001))
+
+# Bracket endpoints (x = 1 and 2 correspond to the two factor levels of `model`)
+y_top <- max(aer_by_model_df$aer, na.rm = TRUE) * 1.05
+ann <- data.frame(
+  group1 = levels(aer_by_model_df$model)[1],
+  group2 = levels(aer_by_model_df$model)[2],
+  y.position = y_top,
+  label = p_lab
+)
+
+aer_by_model_pl <- ggplot(aer_by_model_df, aes(x = model, y = aer)) +
+  geom_boxplot(aes(fill = model),
+    width = 0.6, alpha = 0.85, outlier.shape = NA
   ) +
-  geom_linerange(
-    data = sub_aer_df,
-    mapping = aes(x = date, ymin = 0, ymax = aer_tmb),
-    color = "deepskyblue3"
+  geom_jitter(width = 0.15, alpha = 0.35, size = 1.5) +
+  stat_pvalue_manual(
+    ann,
+    label = "label",
+    tip.length = 0.03,
+    bracket.size = 0.6
   ) +
-  geom_hline(
-    data = avg_aer_df,
-    mapping = aes(yintercept = mid),
-    color = "black", linetype = "dashed"
-  ) +
-  geom_rect(
-    data = avg_aer_df,
-    inherit.aes = FALSE,
-    aes(ymin = .lower, ymax = .upper),
-    xmin = -Inf, xmax = Inf,
-    fill = "gray50", alpha = 0.5
-  ) +
-  scale_x_date(
-    date_labels = "%b %d",
-    date_breaks = "2 weeks",
-    expand = expansion(mult = c(0.01, 0.01))
-  ) +
-  scale_y_continuous(
-    name = "Air change rate (h<sup>-1</sup>)",
-    breaks = seq(0, 30, by = 5),
-    expand = expansion(mult = c(0, 0.05)),
-    limits = c(0, NA)
+  expand_limits(y = y_top * 1.10) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = NULL,
+    y = "Air exchange rate (h^-1)" # write out AER
   ) +
   theme_custom() +
-  theme(
-    axis.title.x = element_blank(),
-    axis.title.y = ggtext::element_markdown()
-  )
-saveRDS(aer_pl, "results/environmental_ventilation_over_time.rds")
+  theme(legend.position = "none", plot.title = element_blank())
+
+
 save_plot(
-  aer_pl, "results/environmental_ventilation_over_time.png",
-  width = 16, height = 5
+  aer_by_model_pl,
+  "results/environmental_ventilation_model_comparison.png",
+  w = 12, h = 14
 )
 ```

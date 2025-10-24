@@ -1,34 +1,31 @@
 #!/usr/bin/env python3
 import argparse
 import os
-from concurrent.futures import ProcessPoolExecutor, as_completed
-
-import h5py
 import numpy as np
 import pandas as pd
-
+from read_tracking_linked_data import read_linked_tracking_data, pad_track_data
+import h5py
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 EXTENT_DEFAULT = (0.0, 51.0, -0.02, 14.214)  # (min_x, max_x, min_y, max_y)
 
-
-def rasterize_person_time(file_path: str, extent, cell_size: float) -> np.ndarray:
+def rasterize_person_time(date: str, extent, cell_size: float) -> np.ndarray:
     """
     Vectorized rasterization: each row inside extent contributes 0.5s (2 Hz sampling)
     to the cell it falls in. Returns a (num_cells_y, num_cells_x) float32 array of seconds.
     """
+    
+    # dimensions
     min_x, max_x, min_y, max_y = extent
+    
     # number of columns (x) and rows (y)
     num_cells_x = int((max_x - min_x) / cell_size)
     num_cells_y = int((max_y - min_y) / cell_size)
     total_cells = num_cells_x * num_cells_y
 
-    # Read only what we need; keep memory footprint small
-    df = pd.read_csv(
-        file_path,
-        usecols=["position_x", "position_y"],
-        dtype={"position_x": "float32", "position_y": "float32"},
-        engine="c",
-    )
+    # Read linked tracking data
+    df = read_linked_tracking_data(date)
+    df = pad_track_data(df)
 
     # Filter to extent (half-open on the max side, like your original code)
     x = df["position_x"].to_numpy()
@@ -58,37 +55,35 @@ def rasterize_person_time(file_path: str, extent, cell_size: float) -> np.ndarra
     return accum.reshape((num_cells_y, num_cells_x))
 
 
-def process_one(file_path: str, extent, cell_size: float):
-    date = os.path.splitext(os.path.basename(file_path))[0]
-    counts = rasterize_person_time(file_path, extent, cell_size)
+def process_one(date: str, extent, cell_size: float):
+    counts = rasterize_person_time(date, extent, cell_size)
     return date, counts
 
 
 def main():
+    # parser arguments
     parser = argparse.ArgumentParser(description="Compute per-cell person time (seconds) from 2 Hz tracks.")
-    parser.add_argument("--data-dir", default="data-clean/tracking/unlinked/", help="Directory with input CSV files")
     parser.add_argument("--output", default="data-clean/tracking/spatial-density.h5", help="Output HDF5 file path")
-    parser.add_argument("--cell-size", type=float, default=0.25, help="Cell size in same units as positions")
-    parser.add_argument("--n-cores", type=int, default=os.cpu_count(), help="Number of worker processes")
-    # Optional: override extent via CLI if ever needed
+    parser.add_argument("--cellsize", type=float, default=0.25, help="Cell size in same units as positions")
+    parser.add_argument("--cores", type=int, default=os.cpu_count(), help="Number of worker processes")
     parser.add_argument("--extent", nargs=4, type=float, metavar=("MIN_X", "MAX_X", "MIN_Y", "MAX_Y"),
                         default=EXTENT_DEFAULT, help="Spatial extent (min_x max_x min_y max_y)")
     args = parser.parse_args()
-
     extent = tuple(args.extent)
-    cell_size = args.cell_size
-
-    # Collect CSVs
-    csv_files = sorted(
-        [os.path.join(args.data_dir, f) for f in os.listdir(args.data_dir) if f.endswith(".csv")]
-    )
-    if not csv_files:
-        raise SystemExit(f"No CSV files found in {args.data_dir!r}")
+    cell_size = args.cellsize
+    
+    # study dates
+    linked_tb_path = 'data-clean/tracking/linked-tb/'
+    dates = [
+        file.replace('.csv', '') 
+        for file in os.listdir(linked_tb_path) 
+        if file.endswith('.csv')
+    ]
 
     # Process in parallel
     results = []
-    with ProcessPoolExecutor(max_workers=args.n_cores) as ex:
-        fut2file = {ex.submit(process_one, fp, extent, cell_size): fp for fp in csv_files}
+    with ProcessPoolExecutor(max_workers=args.cores) as ex:
+        fut2file = {ex.submit(process_one, d, extent, cell_size): d for d in dates}
         for fut in as_completed(fut2file):
             date, counts = fut.result()
             results.append((date, counts))
@@ -98,7 +93,7 @@ def main():
     with h5py.File(args.output, "w") as hf:
         # Stash some metadata for reproducibility
         hf.attrs["extent"] = np.asarray(extent, dtype=np.float32)
-        hf.attrs["cell_size"] = np.float32(cell_size)
+        hf.attrs["cellsize"] = np.float32(cell_size)
         hf.attrs["units"] = "seconds"
         for date, counts in results:
             hf.create_dataset(date, data=counts, compression="gzip")

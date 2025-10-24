@@ -1,7 +1,8 @@
-# compute_daily_spatial_evenness.py
 import os, argparse
 import numpy as np
 import pandas as pd
+import time
+from read_tracking_linked_data import read_linked_tracking_data, pad_track_data
 from shapely.geometry import Point, Polygon
 from scipy.ndimage import gaussian_filter
 from concurrent.futures import ProcessPoolExecutor
@@ -11,7 +12,7 @@ save_path = os.path.join(base_path, 'occupancy/')
 linked_tb_path = 'data-clean/tracking/linked-tb/'
 
 START_SEC = 6 * 3600
-TOTAL_SECONDS = 12 * 3600
+TOTAL_SECONDS = 12 * 3600 + 1
 
 EVAL_COORDS = None      # unused in fast path but we keep it for compatibility
 CELL_AREA   = None
@@ -19,13 +20,6 @@ BANDWIDTH   = None
 MASK        = None
 GRID_META   = None      # (y0, x0, cell_size, H, W)
 SIGMA_PIX   = None
-
-dtypes = {
-    'time': 'int64',
-    'track_id': 'int32',
-    'position_x': 'float32',
-    'position_y': 'float32'
-}
 
 # create fixed spatial domain
 def create_spatial_domain(cell_size=0.5):
@@ -88,20 +82,13 @@ def spatial_kde(x, y):
     p = (d * CELL_AREA) / Z
     return gini(p), entropy(p)
 
-def read_linked_tracking_data(date):
-    unlinked_file = os.path.join(base_path, 'unlinked', f'{date}.csv')
-    df = pd.read_csv(unlinked_file, usecols=list(dtypes.keys()), dtype=dtypes)
-    ts = pd.to_datetime(df['time'], unit='ms')
-    secs = ts.dt.hour * 3600 + ts.dt.minute * 60 + ts.dt.second
-    df['time'] = (secs - START_SEC).astype(np.int32)
-    df = df.loc[(df['time'] >= 0) & (df['time'] < TOTAL_SECONDS)]
-    df = (df.groupby(['time', 'track_id'], as_index=False)
-            .agg(position_x=('position_x', 'mean'),
-                 position_y=('position_y', 'mean')))
-    return df
-
 def process_date(date):
+    # load and pad data
     df = read_linked_tracking_data(date)
+    df = pad_track_data(df)
+    
+    # compute density metrics per second
+    t0 = time.time()
     times = np.arange(TOTAL_SECONDS, dtype=np.int32)
 
     # quick empty-day path
@@ -121,7 +108,7 @@ def process_date(date):
     t_arr = df['time'].to_numpy(np.int32, copy=False)
     x_arr = df['position_x'].to_numpy(np.float64, copy=False)
     y_arr = df['position_y'].to_numpy(np.float64, copy=False)
-    id_arr = df['track_id'].to_numpy(np.int32, copy=False)
+    id_arr = df['new_track_id'].to_numpy(np.int32, copy=False)
 
     # get unique seconds and slices
     order = np.argsort(t_arr, kind='mergesort')
@@ -195,6 +182,9 @@ def process_date(date):
     os.makedirs(save_path, exist_ok=True)
     path = os.path.join(save_path, f'{date}.csv')
     res.to_csv(path, index=False)
+    
+    print(f'process_date {date} {time.time() - t0:.2f} seconds')
+    
     return path
 
 def _init_worker(eval_coords_, cell_area_, bandwidth_, mask_=None, grid_meta_=None, cell_size_=None):
