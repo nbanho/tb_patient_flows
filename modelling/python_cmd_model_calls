@@ -2,7 +2,7 @@
 python3 modelling/run_model.py --name "uncertain_all_equal_infectious" --date "all" --sim "(1,100)"  
 
 # fixed parameters with confirmed TB cases more infectious
-python3 modelling/run_model_new.py --name "uncertain_confirmed_more_infectious" --date "all" --sim "(1,100)" --quanta_mult "(1.0, 8.0, 1.0)"
+python3 modelling/run_model.py --name "uncertain_confirmed_more_infectious" --date "all" --sim "(1,100)" --quanta_mult "(1.0, 8.0, 1.0)"
 
 # fixed parameters with HIV-positive individuals more infectious
 python3 modelling/run_model.py --name "uncertain_hiv_more_infectious" --date "all" --sim "(1,100)" --quanta_mult "(6.0, 1.0, 1.0)"
