@@ -24,12 +24,10 @@ def parse_args():
     parser.add_argument('--date', type=str, required=True, help='Date of the model run')
     parser.add_argument('--sim', type=str, default='(1,1)', help='Simulation numbers start and end as tuple, e.g. "(1,1)"')
     parser.add_argument('--aer', type=float, default=None, help='Air exchange rate (1/h)')
-    parser.add_argument('--inact_rate', type=float, default=None, help='Inactivation rate (1/h)')
-    parser.add_argument('--settl_rate', type=float, default=None, help='Settling rate (1/h)')
+    parser.add_argument('--inact_rate', type=float, default=None, help='Pathogen inactivation rate (1/h)')
+    parser.add_argument('--settl_rate', type=float, default=None, help='Pathogen settling rate (1/h)')
     parser.add_argument('--quanta_rate', type=str, default=None, help='Quanta rates (1/h) for waiting and walking as a tuple, e.g. "(1.0, 2.0)"')
-    parser.add_argument('--quanta_rate_hiv_mult', type=float, default=1.0, help='Multiplier for quanta rates for HIV-positive individuals as double, e.g. "6.0"')
-    parser.add_argument('--quanta_rate_confirmed_mult', type=float, default=1.0, help='Multiplier for quanta rates for people with confirmed TB as double, e.g. "8.0"')
-    parser.add_argument('--quanta_rate_presumptive_mult', type=float, default=1.0, help='Multiplier for quanta rates for people with presumptive TB as double, e.g. "1.0"')
+    parser.add_argument('--quanta_mult', type=str, default=None, help='Multiplier for quanta rates for HIV-positive individuals, people with confirmed TB and eople with presumptive TB as tuple, e.g. "(1.0, 1.0, 1.0)"')
     parser.add_argument('--breath_rate', type=str, default=None, help='Breathing rates (m3/h)for waiting and walking as a tuple, e.g. "(0.5, 0.6)"')
     parser.add_argument('--cell_size', type=float, default=0.5, help='Size of the cell (m)')
     parser.add_argument('--cell_height', type=float, default=3.0, help='Height of the cell (m)')
@@ -37,7 +35,7 @@ def parse_args():
     parser.add_argument('--cores', type=int, default=4, help='Number of cores to use for parallel processing of multiple dates.')
     return parser.parse_args()
 
-def run_for_date(date, args, sim, quanta_rate, breath_rate):
+def run_for_date(date, args, sim, quanta_rate, quanta_mult, breath_rate):
     model_risk(
         name=args.name,
         date=date,
@@ -46,16 +44,14 @@ def run_for_date(date, args, sim, quanta_rate, breath_rate):
         inact_rate=args.inact_rate,
         settl_rate=args.settl_rate,
         quanta_rate=quanta_rate,
-        quanta_rate_hiv_mult=args.quanta_rate_hiv_mult,
-        quanta_rate_confirmed_mult=args.quanta_rate_confirmed_mult,
-        quanta_rate_presumptive_mult=args.quanta_rate_presumptive_mult,
+        quanta_mult=quanta_mult,
         breath_rate=breath_rate,
         cell_size=args.cell_size,
         cell_height=args.cell_height,
         space_vol=args.space_vol
     )
 
-def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None, quanta_rate=None, quanta_rate_hiv_mult=1.0, quanta_rate_confirmed_mult=1.0, quanta_rate_presumptive_mult=1.0, breath_rate=None, cell_size=0.5, cell_height=3.0, space_vol=None):
+def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None, quanta_rate=None, quanta_mult=None, breath_rate=None, cell_size=0.5, cell_height=3.0, space_vol=None):
     """
     Calculate risk model based on provided parameters.
 
@@ -64,12 +60,10 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
         date (str): Date of the model run. Cannot be empty.
         sim (tuple of int): Simulation start and end numbers. Default (1,1).
         aer (float, optional): Air exchange rate.
-        inact_rate (float, optional): Inactivation rate.
-        settl_rate (float, optional): Settling rate.
+        inact_rate (float, optional): Pathogen inactivation rate.
+        settl_rate (float, optional): Pathogen settling rate.
         quanta_rate (tuple of floats, optional): 2D tuple of quanta values for waiting and walking.
-        quanta_rate_hiv_mult (float, optional): Multiplier for quanta rates for HIV-positive individuals.
-        quanta_rate_confirmed_mult (float, optional): Multiplier for quanta rates for people with confirmed TB.
-        quanta_rate_presumptive_mult (float, optional): Multiplier for quanta rates for people with presumptive TB.
+        quanta_mult (float, optional): Multiplier for quanta rates for HIV-positive individuals, people with confirmed TB and people with presumptive TB.
         breath_rate (tuple of floats, optional): 2D tuple of breath rate values for waiting and walking.
         cell_size (float): Size of the cell. Cannot be empty.
         cell_height (float): Height of the cell. Cannot be empty.
@@ -137,58 +131,49 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
         aer = aer_row.iloc[0]['aer_tmb']
     aer = aer / 3600
     
-    # Load quanta rate samples if not provided
-    if quanta_rate is None:
-        quanta_waiting_path = 'data-clean/assumptions/quanta_waiting.pkl'
-        quanta_walking_path = 'data-clean/assumptions/quanta_walking.pkl'
-        if not os.path.exists(quanta_waiting_path):
-            raise FileNotFoundError(f"File not found: {quanta_waiting_path}")
-        if not os.path.exists(quanta_walking_path):
-            raise FileNotFoundError(f"File not found: {quanta_walking_path}")
-        with open(quanta_waiting_path, 'rb') as f:
-            quanta_waiting = pickle.load(f)
-        with open(quanta_walking_path, 'rb') as f:
-            quanta_walking = pickle.load(f)
-    else:
-        quanta_rate = (quanta_rate[0] / 3600, quanta_rate[1] / 3600)
+    # Load dataframe with the sampled quanta generation rates for each new_track_id
+    quanta_generation_path = 'data-clean/assumptions/quanta_generation_rates.csv'
+    if not os.path.exists(quanta_generation_path):
+        raise FileNotFoundError(f"File not found: {quanta_generation_path}")
+    quanta_generation_df = pd.read_csv(quanta_generation_path)
+    quanta_generation_df = quanta_generation_df[quanta_generation_df['date'] == date].copy()
+    if quanta_rate is not None:
+        quanta_generation_df.loc[quanta_generation_df['infectious'] == 1, 'waiting_rate'] = quanta_rate[0] / 3600
+        quanta_generation_df.loc[quanta_generation_df['infectious'] == 1, 'walking_rate'] = quanta_rate[1] / 3600
         
-    # Load quanta clinical attributes for quanta rate multipliers
-    clinical_status_path = 'data-clean/assumptions/clinical_status.csv'
-    if not os.path.exists(clinical_status_path):
-        raise FileNotFoundError(f"File not found: {clinical_status_path}")
-    clinical_status_df = pd.read_csv(clinical_status_path)
-    clinical_status_df['quanta_multiplier'] = 1.0
-    clinical_status_df.loc[clinical_status_df['hiv'] == 1, 'quanta_multiplier'] *= quanta_rate_hiv_mult
-    clinical_status_df.loc[clinical_status_df['tb_status'] == 1, 'quanta_multiplier'] *= quanta_rate_confirmed_mult
-    clinical_status_df.loc[clinical_status_df['tb_status'] == 0, 'quanta_multiplier'] *= quanta_rate_presumptive_mult
+    # Apply multipliers to quanta generation rates
+    if quanta_mult is not None:
+        quanta_mult = (quanta_mult[0], quanta_mult[1], quanta_mult[2])
+    else:
+        quanta_mult = (1.0, 1.0, 1.0)
+    quanta_generation_df['quanta_multiplier'] = 1.0
+    quanta_generation_df.loc[quanta_generation_df['hiv'] == 1, 'quanta_multiplier'] *= quanta_mult[0]
+    quanta_generation_df.loc[quanta_generation_df['tb'] == 1, 'quanta_multiplier'] *= quanta_mult[1]
+    quanta_generation_df.loc[quanta_generation_df['tb'] == 0, 'quanta_multiplier'] *= quanta_mult[2]
+    quanta_generation_df['waiting_rate'] = quanta_generation_df['waiting_rate'] * quanta_generation_df['quanta_multiplier']
+    quanta_generation_df['walking_rate'] = quanta_generation_df['walking_rate'] * quanta_generation_df['quanta_multiplier']
         
-    # Load inactivation rate samples if not provided
-    if inact_rate is None:
-        inactivation_path = 'data-clean/assumptions/inactivation.pkl'
-        if not os.path.exists(inactivation_path):
-            raise FileNotFoundError(f"File not found: {inactivation_path}")
-        with open(inactivation_path, 'rb') as f:
-            inact_rate = pickle.load(f)
+    # Load inactivation and settling rates if not provided
+    if inact_rate is None or settl_rate is None:
+        quanta_removal_path = 'data-clean/assumptions/quanta_removal_rates.csv'
+        if not os.path.exists(quanta_removal_path):
+            raise FileNotFoundError(f"File not found: {quanta_removal_path}")
+        quanta_removal_df = pd.read_csv(quanta_removal_path)
+        inact_rate = (quanta_removal_df.sort_values('sample')['inactivation'].values).tolist()
+        settl_rate = (quanta_removal_df.sort_values('sample')['settling'].values).tolist()
     else:
-        inact_rate = [inact_rate / 3600]
-
-    # Load settling rate samples if not provided
-    if settl_rate is None:
-        settling_path = 'data-clean/assumptions/settling.pkl'
-        if not os.path.exists(settling_path):
-            raise FileNotFoundError(f"File not found: {settling_path}")
-        with open(settling_path, 'rb') as f:
-            settl_rate = pickle.load(f)
-    else:
-        settl_rate = [settl_rate / 3600]
+        inact_rate = [inact_rate / 3600] * sim[1]
+        settl_rate = [settl_rate / 3600] * sim[1]
             
-    # Load breath rate samples if not provided
+    # Set breath rates to mean across men and women if not provided
     if breath_rate is None:
-        breath_rate_path = 'data-clean/assumptions/inhalation_rates.pkl'
-        if not os.path.exists(breath_rate_path):
-            raise FileNotFoundError(f"File not found: {breath_rate_path}")
-        with open(breath_rate_path, 'rb') as f:
-            breath_rate = pickle.load(f)
+        inhalation_rate_waiting = 0.5 * 0.4632 + 0.5 * 0.5580  # m^3/h
+        inhalation_rate_waiting = inhalation_rate_waiting / 3600  # m^3/s
+        inhalation_rate_walking = 0.5 * 1.2192 + 0.5 * 1.4478  # m^3/h
+        inhalation_rate_walking = inhalation_rate_walking / 3600  # m^3/s
+        breath_rate = (inhalation_rate_waiting, inhalation_rate_walking)
+    else:
+        breath_rate = (breath_rate[0] / 3600, breath_rate[1] / 3600)
             
     # Compute cell volume
     cell_volume = cell_size * cell_size * cell_height
@@ -200,6 +185,7 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
     for sim_num in missing_sims:
         # Quanta generation rate per track and activity
         tb_s = tb_pos_df.copy()
+        quanta_generation_sim = quanta_generation_df[quanta_generation_df['sample'] == sim_num]
         def replace_activity_with_quanta(row):
             positions = ast.literal_eval(row['positions']) if isinstance(row['positions'], str) else row['positions']
             if not positions:
@@ -207,23 +193,21 @@ def model_risk(name, date, sim=(1,1), aer=None, inact_rate=None, settl_rate=None
             new_positions = []
             for tup in positions:
                 track_id, x, y, activity = tup
-                quanta_multiplier = clinical_status_df.loc[clinical_status_df['new_track_id'] == track_id, 'quanta_multiplier'].values
+                q_waiting = quanta_generation_sim.loc[quanta_generation_sim['new_track_id'] == track_id, 'waiting_rate'].values
+                q_walking = quanta_generation_sim.loc[quanta_generation_sim['new_track_id'] == track_id, 'walking_rate'].values
+                q_mult = quanta_generation_sim.loc[quanta_generation_sim['new_track_id'] == track_id, 'quanta_multiplier'].values
                 if activity == 0:
-                    if quanta_rate is not None:
-                        q = quanta_rate[0] * quanta_multiplier
-                    else:
-                        q = quanta_waiting[track_id][sim_num - 1] * quanta_multiplier
+                    q = q_waiting * q_mult
                 else:
-                    if quanta_rate is not None:
-                        q = quanta_rate[1] * quanta_multiplier
-                    else:
-                        q = quanta_walking[track_id][sim_num - 1] * quanta_multiplier
+                    q = q_walking * q_mult
+                if len(q) != 1:
+                    raise ValueError(f"None or multiple quanta generation rates found for track_id {track_id} in simulation {sim_num}")
                 new_positions.append((track_id, x, y, q))
             return new_positions
         tb_s['positions'] = tb_s.apply(replace_activity_with_quanta, axis=1)
         
         # Removal rate
-        removal_rate = aer + settl_rate[sim_num - 1] + inact_rate[sim_num - 1] 
+        removal_rate = aer + inact_rate[sim_num - 1] + settl_rate[sim_num - 1]
         
         # Prepare the solver
         with warnings.catch_warnings():
@@ -271,11 +255,12 @@ if __name__ == "__main__":
     args = parse_args()
     sim = ast.literal_eval(args.sim)
     quanta_rate = ast.literal_eval(args.quanta_rate) if args.quanta_rate is not None else None
+    quanta_mult = ast.literal_eval(args.quanta_mult) if args.quanta_mult is not None else None
     breath_rate = ast.literal_eval(args.breath_rate) if args.breath_rate is not None else None
 
     if args.date == 'all':
         cores = getattr(args, 'cores', 4)
-        partial_func = partial(run_for_date, args=args, sim=sim, quanta_rate=quanta_rate, breath_rate=breath_rate)
+        partial_func = partial(run_for_date, args=args, sim=sim, quanta_rate=quanta_rate, quanta_mult=quanta_mult, breath_rate=breath_rate)
         with concurrent.futures.ProcessPoolExecutor(max_workers=cores) as executor:
             executor.map(partial_func, dates)
     else:
@@ -287,9 +272,7 @@ if __name__ == "__main__":
             inact_rate=args.inact_rate,
             settl_rate=args.settl_rate,
             quanta_rate=quanta_rate,
-            quanta_rate_hiv_mult=args.quanta_rate_hiv_mult,
-            quanta_rate_confirmed_mult=args.quanta_rate_confirmed_mult,
-            quanta_rate_presumptive_mult=args.quanta_rate_presumptive_mult,
+            quanta_mult=quanta_mult,
             breath_rate=breath_rate,
             cell_size=args.cell_size,
             cell_height=args.cell_height,

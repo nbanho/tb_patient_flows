@@ -6,6 +6,7 @@ from shapely.geometry import Point, Polygon
 image_extent = (0, 51, -0.02, 14.214)
 x1, x2, y1, y2 = image_extent
 cell_size = 0.5
+np.save('data-clean/building/building-grid-cell-size.npy', cell_size)
 
 x_grid = np.arange(x1, x2, cell_size)
 y_grid = np.arange(y1, y2, cell_size)
@@ -43,6 +44,7 @@ def polygon_area(coords):
 	return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
 height = 3  # m
+np.save('data-clean/building/building-height.npy', height)
 
 area1 = polygon_area(waiting_area_1)
 area2 = polygon_area(waiting_area_2)
@@ -53,5 +55,4 @@ vol2 = area2 * height
 vol3 = area3 * height
 combined_vol = vol1 + vol2 + vol3
 
-# Save the volume
 np.save('data-clean/building/building-volume.npy', combined_vol)

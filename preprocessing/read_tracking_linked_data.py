@@ -74,6 +74,8 @@ def read_linked_tracking_data(date: str, *, base_path: str = "data-clean/trackin
         "track_id": "int32",
         "position_x": "float32",
         "position_y": "float32",
+        'gender': 'string',
+        'tag': 'string'
     }
 
     # Resolve file paths
@@ -105,6 +107,8 @@ def read_linked_tracking_data(date: str, *, base_path: str = "data-clean/trackin
               position_x=("position_x", "mean"),
               position_y=("position_y", "mean"),
               clinic_id =("clinic_id",  "first"),
+              gender=("gender", "first"), 
+              tag=("tag", "first")
           )
     )
 

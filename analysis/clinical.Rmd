@@ -37,6 +37,21 @@ interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
     study_phase = factor(
       study_phase,
       levels = c("Baseline", "First intervention", "Second intervention")
+    ),
+    study_phase_2 = if_else(
+      study_phase %in% c("First intervention", "Second intervention"),
+      study_phase, if_else(date > as.Date("2024-07-01"),
+        "Post-intervention baseline", "Pre-intervention baseline"
+      )
+    ),
+    study_phase_2 = factor(
+      study_phase_2,
+      levels = c(
+        "Pre-intervention baseline",
+        "First intervention",
+        "Second intervention",
+        "Post-intervention baseline"
+      )
     )
   )
 clinical_df <- clinical_df %>%
@@ -133,15 +148,15 @@ sprintf("Last study day: %s", max(interventions$date))
 study_dates %>%
   length()
 clinical_df %>%
-  distinct(date, study_phase) %>%
-  count(study_phase) %>%
+  distinct(date, study_phase_2) %>%
+  count(study_phase_2) %>%
   mutate(p = round(100 * n / sum(n)))
 
 # patients
 clinical_df %>%
   count()
 clinical_df %>%
-  count(study_phase) %>%
+  count(study_phase_2) %>%
   ungroup() %>%
   mutate(p = round(100 * n / sum(n)))
 
@@ -155,7 +170,7 @@ clinical_df %>%
   unlist() %>%
   as.numeric()
 clinical_df %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   summarise(across(age, .fns = list(
     median = ~ median(., na.rm = TRUE),
     lower = ~ quantile(., 0.25, na.rm = TRUE),
@@ -167,7 +182,7 @@ clinical_df %>%
   count(gender) %>%
   mutate(p = round(100 * n / sum(n)))
 clinical_df %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   count(gender) %>%
   mutate(p = round(100 * n / sum(n))) %>%
   filter(gender == "Woman")
@@ -177,7 +192,7 @@ clinical_df %>%
   count(hiv_status) %>%
   mutate(p = round(100 * n / sum(n)))
 clinical_df %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   count(hiv_status) %>%
   mutate(p = round(100 * n / sum(n))) %>%
   filter(hiv_status == "Positive")
@@ -187,7 +202,7 @@ clinical_df %>%
   count(tb_incident) %>%
   mutate(p = round(100 * n / nrow(clinical_df)))
 clinical_df %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   count(tb_incident) %>%
   mutate(p = round(100 * n / sum(n)))
 
@@ -197,10 +212,10 @@ clinical_df %>%
   mutate(p = round(100 * n / sum(n)))
 clinical_df %>%
   filter(tb_incident == "Incident") %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   count(tb_status) %>%
   ungroup() %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   mutate(p = round(100 * n / sum(n))) %>%
   ungroup()
 
@@ -210,12 +225,12 @@ clinical_df %>%
   mutate(p = round(100 * n / sum(n)))
 clinical_df %>%
   filter(tb_incident != "Incident") %>%
-  count(study_phase) %>%
+  count(study_phase_2) %>%
   mutate(p = round(100 * n / sum(n)))
 
 clinical_df %>%
   filter(tb_incident != "Incident") %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   count(tb_status) %>%
   mutate(p = round(100 * n / sum(n)))
 ```

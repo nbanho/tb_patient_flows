@@ -45,6 +45,21 @@ interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
     study_phase = factor(
       study_phase,
       levels = c("Baseline", "First intervention", "Second intervention")
+    ),
+    study_phase_2 = if_else(
+      study_phase %in% c("First intervention", "Second intervention"),
+      study_phase, if_else(date > as.Date("2024-07-01"),
+        "Post-intervention baseline", "Pre-intervention baseline"
+      )
+    ),
+    study_phase_2 = factor(
+      study_phase_2,
+      levels = c(
+        "Pre-intervention baseline",
+        "First intervention",
+        "Second intervention",
+        "Post-intervention baseline"
+      )
     )
   )
 occupancy_df <- occupancy_df %>%
@@ -85,7 +100,7 @@ entries_df %>%
   mutate_all(~ scales::comma(round(.x, 0)))
 entries_df %>%
   left_join(interventions, by = "date") %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   summarise(
     median_n = median(n, na.rm = TRUE),
     low_n = quantile(n, 0.25, na.rm = TRUE),
@@ -106,10 +121,10 @@ track_times_df %>%
   ) %>%
   mutate_all(~ scales::comma(round(.x, 0)))
 track_times_df %>%
-  group_by(study_phase, date) %>%
+  group_by(study_phase_2, date) %>%
   summarise(n = n()) %>%
   ungroup() %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   summarise(
     median_n = median(n, na.rm = TRUE),
     low_n = quantile(n, 0.25, na.rm = TRUE),
@@ -126,7 +141,7 @@ track_times_df %>%
   ) %>%
   mutate_all(~ round(.x / 60, 1))
 track_times_df %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   summarise(
     median_time = median(duration, na.rm = TRUE),
     low_time = quantile(duration, 0.25, na.rm = TRUE),
@@ -253,13 +268,15 @@ daytime_density_df <- occupancy_df %>%
     )
   )
 
-density_pl <- ggplot(daytime_density_df, aes(x = time)) +
+density_pl <- ggplot(
+  filter(daytime_density_df, metric != "entropy_kde"), aes(x = time)
+) +
   facet_wrap(~metric,
     ncol = 1, scales = "free_y",
     labeller = as_labeller(c(
       N = "Number of people in clinic waiting area\n(higher values mean more crowded)",
-      gini_kde = "Gini coefficient\n(higher values mean more clustered)",
-      entropy_kde = "Entropy\n(higher values mean less clustered)"
+      gini_kde = "Gini coefficient\n(higher values mean more clustered)"
+      # entropy_kde = "Entropy\n(higher values mean less clustered)"
     )),
     strip.position = "left"
   ) +
@@ -288,7 +305,7 @@ density_pl <- ggplot(daytime_density_df, aes(x = time)) +
 save_plot(
   density_pl,
   "results/tracking_density_over_time.png",
-  w = 16, h = 22
+  w = 16, h = 14
 )
 ````
 
@@ -331,7 +348,6 @@ ggplot(daily_density_df, aes(x = study_phase, y = gini)) +
     plot.margin = margin(r = 12)
   )
 
-
 # model
 gini_model <- brms::brm(
   gini ~ study_phase + weekday,
@@ -356,39 +372,67 @@ saveRDS(
 )
 
 # summarise
-gini_effects <- gini_effects_smpls %>%
+density_reduction_df <- gini_effects_smpls %>%
+  mutate(b_study_phaseBaseline = 0) %>%
   pivot_longer(
     starts_with("b_"),
     names_to = "parameter",
     values_to = "value"
   ) %>%
   mutate(
-    study_phase = case_when(
-      parameter == "b_study_phaseFirstintervention" ~ "First intervention",
-      parameter == "b_study_phaseSecondintervention" ~ "Second intervention"
-    ),
+    study_phase = recode_factor(parameter, !!!c(
+      "b_study_phaseBaseline" = "Baseline",
+      "b_study_phaseFirstintervention" = "First intervention",
+      "b_study_phaseSecondintervention" = "Second intervention"
+    )),
     study_phase = factor(
       study_phase,
-      levels = c("First intervention", "Second intervention")
+      levels = c("Baseline", "First intervention", "Second intervention")
     ),
     odds = exp(value),
-    change = odds - 1,
-    change = -100 * change
+    reduction = odds - 1,
+    reduction = -100 * reduction
   ) %>%
   group_by(study_phase) %>%
   summarise(
-    median = median(change),
-    lower = quantile(change, 0.025),
-    upper = quantile(change, 0.975),
-    lower_80 = quantile(change, 0.1),
-    upper_80 = quantile(change, 0.9),
-    lower_50 = quantile(change, 0.25),
-    upper_50 = quantile(change, 0.75)
-  ) %>%
-  ungroup()
+    median = median(reduction),
+    lower = quantile(reduction, 0.025),
+    upper = quantile(reduction, 0.975)
+  )
 
-gini_effects %>%
-  mutate_if(is.numeric, ~ round_k(.x, 2))
+density_reduction_pl <- density_reduction_df %>%
+  ggplot(aes(
+    y = forcats::fct_rev(study_phase),
+    x = median, color = study_phase
+  )) +
+  facet_wrap(~"Spatial clustering of people") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_errorbar(
+    aes(xmin = lower, xmax = upper),
+    width = 0.1, size = 1
+  ) +
+  geom_point(
+    aes(x = median),
+    color = "black", size = cm(1), shape = 23, fill = "white"
+  ) +
+  scale_x_continuous(
+    name = "Estimated reduction in the Gini coefficient (%)",
+    limits = c(0, NA)
+  ) +
+  scale_color_paletteer_d("colRoz::uluru") +
+  theme_custom() +
+  theme(
+    axis.title.y = element_blank(),
+    legend.position = "none",
+    plot.title.position = "plot"
+  )
+
+density_reduction_pl
+
+saveRDS(
+  density_reduction_pl,
+  "results/modelling_estimated_reduction_in_spatial_density.rds"
+)
 ```
 
 

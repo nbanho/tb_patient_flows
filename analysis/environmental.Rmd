@@ -36,6 +36,21 @@ interventions <- read_csv("data-clean/mapping_dates_interventions.csv") %>%
     study_phase = factor(
       study_phase,
       levels = c("Baseline", "First intervention", "Second intervention")
+    ),
+    study_phase_2 = if_else(
+      study_phase %in% c("First intervention", "Second intervention"),
+      study_phase, if_else(date > as.Date("2024-07-01"),
+        "Post-intervention baseline", "Pre-intervention baseline"
+      )
+    ),
+    study_phase_2 = factor(
+      study_phase_2,
+      levels = c(
+        "Pre-intervention baseline",
+        "First intervention",
+        "Second intervention",
+        "Post-intervention baseline"
+      )
     )
   )
 co2_df <- co2_df %>%
@@ -59,7 +74,7 @@ co2_summary <- co2_df %>%
 co2_summary
 co2_df %>%
   filter(device == "Aranet4 272D2") %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   summarise(
     median_temp = median(co2, na.rm = TRUE),
     low_temp = quantile(co2, 0.25, na.rm = TRUE),
@@ -76,7 +91,7 @@ co2_df %>%
   )
 co2_df %>%
   filter(device == "Aranet4 272D2") %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   summarise(
     median_temp = median(temp, na.rm = TRUE),
     low_temp = quantile(temp, 0.25, na.rm = TRUE),
@@ -93,7 +108,7 @@ co2_df %>%
   )
 co2_df %>%
   filter(device == "Aranet4 272D2") %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   summarise(
     median_hum = median(humidity, na.rm = TRUE),
     low_hum = quantile(humidity, 0.25, na.rm = TRUE),
@@ -112,7 +127,7 @@ aer_summary <- aer_df %>%
 aer_summary
 aer_df %>%
   filter(device == "Aranet4 272D2") %>%
-  group_by(study_phase) %>%
+  group_by(study_phase_2) %>%
   summarise(
     median_aer = median(aer_tmb, na.rm = TRUE),
     low_aer = quantile(aer_tmb, 0.25, na.rm = TRUE),

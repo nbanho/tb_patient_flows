@@ -11,22 +11,15 @@ from scipy.spatial import cKDTree
 base_path = 'data-clean/tracking/'
 save_path_tb = os.path.join(base_path, 'tb-positions/')
 save_path_non_tb = os.path.join(base_path, 'non-tb-positions/')
-def save_large_csv(df, filepath, chunk_size=500_000):
-    # Always overwrite the file (mode='w') for the first chunk
-    df.iloc[:0].to_csv(filepath, index=False)
-    for i, start in enumerate(range(0, len(df), chunk_size)):
-        mode = 'w' if i == 0 else 'a'
-        header = (i == 0)
-        df.iloc[start:start+chunk_size].to_csv(filepath, index=False, header=header, mode=mode)
 
 # Study dates
 linked_tb_path = 'data-clean/tracking/linked-tb/'
-# dates = ['2024-06-17']
 dates = [
     file.replace('.csv', '') 
     for file in os.listdir(linked_tb_path) 
     if file.endswith('.csv')
 ]
+# dates = ['2024-06-24']
 # # Exclude dates where both output files already exist
 # dates = [
 #     date for date in dates
@@ -73,8 +66,6 @@ def compute_is_walking(coords, track_ids, threshold=0.25):
 
 
 # Aggregate TB patient positions
-n_seconds = 12 * 60 * 60 + 1  # 0..12h inclusive
-positions_array = [[] for _ in range(n_seconds)]
 @njit
 def find_change_points(arr):
     n = len(arr)
@@ -87,6 +78,9 @@ def find_change_points(arr):
 
 
 def process_date(date):
+    # Settings
+    chunk_size = 500_000
+    
     # Load and merge data and compute time integer
     start_comp_time = time.time()
     df = read_linked_tracking_data(date)
@@ -110,7 +104,7 @@ def process_date(date):
     non_tb_df = df[df['clinic_id'].isna()]
     non_tb_df = non_tb_df[['time', 'new_track_id', 'x_i', 'y_k', 'is_walking']]
     non_tb_output_file = os.path.join(save_path_non_tb, f'{date}.csv')
-    save_large_csv(non_tb_df, non_tb_output_file)
+    non_tb_df.to_csv(non_tb_output_file, index=False)
     print(f"Saved non-TB track positions for {date} took {time.time() - start_comp_time:.2f} seconds")
 
     # Subset tb patients
@@ -118,6 +112,8 @@ def process_date(date):
     df = df[~df['clinic_id'].isna()]
     
     # Group once and fill positions
+    n_seconds = 12 * 60 * 60 + 1  # 0..12h inclusive
+    positions_array = [[] for _ in range(n_seconds)]
     for t, g in df.groupby('time', sort=False):
         tuples = [tuple(map(int, row)) for row in g[['new_track_id', 'x_i', 'y_k', 'is_walking']].to_numpy()]
         positions_array[t] = tuples
@@ -145,8 +141,8 @@ def process_date(date):
 
     # Save the resulting df_list to a CSV file
     start_comp_time = time.time()
-    output_file = os.path.join(save_path_tb, f'{date}.csv')
-    save_large_csv(df_list, output_file)
+    tb_output_file = os.path.join(save_path_tb, f'{date}.csv')
+    df_list.to_csv(tb_output_file, index=False)
     print(f"Saved TB track positions for {date} took {time.time() - start_comp_time:.2f} seconds")
 
 # Run the for loop in parallel
