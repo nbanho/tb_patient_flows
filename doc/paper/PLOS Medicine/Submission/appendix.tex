@@ -1,0 +1,1119 @@
+% Supplementary Material
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{textcomp}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{lineno}
+\linenumbers
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{titlesec}
+\titleformat{\section}{\clearpage\bfseries\fontsize{14}{16}\selectfont}{}{0em}{}
+\titleformat{\subsection}{\bfseries\fontsize{12}{14}\selectfont}{}{0em}{}
+\usepackage{longtable,booktabs,array}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{calc}
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\usepackage{soul}
+\setlength{\emergencystretch}{3em}
+\usepackage{parskip}
+\setlength{\abovedisplayskip}{12pt plus 3pt minus 3pt}
+\setlength{\belowdisplayskip}{12pt plus 3pt minus 3pt}
+\setlength{\abovedisplayshortskip}{8pt plus 3pt}
+\setlength{\belowdisplayshortskip}{8pt plus 3pt}
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{}
+\urlstyle{same}
+\hypersetup{
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\author{}
+\date{}
+
+\begin{document}
+
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thetable}{S\arabic{table}}
+
+\section{Supplementary Information}\label{supplementary-information}
+
+\subsection{Detailed description of study interventions}\label{detailed-description-of-study-interventions}
+
+\captionof{table}{Study interventions. Operational interventions implemented during the study to reduce spatial clustering among hospital attendees in the waiting area of the hospital.}
+\label{tab:S1}
+
+{\small
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.2305}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.2163}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.5532}}@{}}
+\toprule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Study phase & Time period & Description \\
+\begin{minipage}[t]{\linewidth}\raggedright
+\textbf{Baseline}\\
+(N=24 days)\strut
+\end{minipage} & 17--26 June
+
+30 July -- 22 August & At the start (pre-intervention baseline: 5 days) and end of the study (post-intervention baseline: 15 days), data were collected under routine conditions to establish a baseline for comparison with intervention phases. The waiting area remained in its original layout, where benches to sit were arranged in rows with minimal spacing between rows. Hospital attendees often sat very close to one another, typically filling the front rows first before occupying seats toward the back. \\
+\textbf{First intervention}
+
+(N=14 days) & 1--15 July & The waiting room layout was optimised for physical distancing. Benches were repositioned to promote a more uniform distribution of attendees throughout the area. In addition, clear signage was placed at the entrance and throughout the hospital reminding attendees to maintain distance. Seats were marked with red crosses to indicate that every second seat should be left empty, similar to COVID-19 safety measures. Clinical personnel provided verbal reminders to attendees to maintain physical distance. \\
+\textbf{Second intervention}
+
+(N=14 days) & 16--29 July & The waiting room layout remained as per the initial intervention. The signage and recommendations for maintaining physical distance were also kept in place, as well as the restriction on the number of people allowed to accompany the patient into the hospital. For the second intervention, the clinical personnel additionally requested that hospital attendees follow a one-way movement pattern, entering the hospital in one direction and leaving via another exit to minimise cross-traffic and reduce close-contact
+interactions. \\
+\end{longtable}
+}
+
+\section{TEXT A: Processing of person movements}\label{text-a}
+
+\subsection{Rejoining interrupted person movements}\label{rejoining-interrupted-person-movements}
+
+We removed movements shorter than 10s to filter noise. Furthermore, people in the hospital could contribute multiple consecutive person tracks if they moved out of the range of a sensor (e.g. into a care room or other parts of the clinic) or were temporarily not recognised as a person (e.g. if their view was blocked by another person). To improve the continuity of tracks, we automatically rejoined interrupted movements using a matching algorithm similar to the one developed in our previous work \cite{banholzer2025PLOSComputBiol}. The algorithm proceeded forward in time and automatically linked two movements if they were close in time and proximity. The procedure was run iteratively in multiple rounds, with a stepwise increase of the time threshold and an alternation of the proximity threshold in each round. These thresholds were also location specific, i.e. if a movement ended in an area where people were typically seated, the time threshold was increased and the proximity threshold reduced, reflecting limited movement in these zones. In seated areas, the time threshold increased from 30s to 300s, and the proximity threshold alternated between 0.25m and 0.5m. In walking areas, the time threshold increased from 5s to 60s, and the proximity threshold alternated between 1m and 2m.
+
+Automatic linkage increased the duration and completeness of person movements, thereby improving the estimation of \emph{Mycobacterium tuberculosis (Mtb)} transmission risk. Without linkage, interruptions would result in missing exposure time. By linking interrupted movements, the model more accurately represented the true presence and exposure duration of each susceptible individual in the clinic.
+
+\subsection{Identifying person movements of TB patients}\label{identifying-person-movements-of-tb-patients}
+
+We used an R Shiny App to manually identify person movements most likely belonging to TB patients and to rejoin their interrupted movements (Figure \ref{fig:S1}). The setup to link interrupted movements was very similar to the one used in our previous study \cite{banholzer2025PLOSComputBiol}. Briefly, the right panel showed the floor plan with the currently selected movement in black and possible links in colours. The table below showed the time difference and distance to each link, as well as the difference in the last height, mean (sit) height and maximum (standing) height. In the left panel, the time and distance threshold could be varied and links could be made. It was possible to link movements forward or backward in time, and to revert previously made links. Every link and other change to the selected movement was automatically saved to a csv file. The descriptive information, floor plan, and table of possible links were updated after every action.
+
+We used a fuzzy matching approach to identify movements of TB patients. Plausible candidates for TB patient movements could be moved between different containers. At first, all movements that were in the yellow TB registration area for more than 1 min were considered as ``possible'' movements of TB patients. Movements most likely belonging to TB patients could then be moved to the ``sure'' container. Such movements were typically located in the area marked in red on the floor plan for more than 2 min, where they sat on a chair while their clinical data was recorded. Furthermore, such movements often extended to the bottom-right part of the clinic, where people with presumptive TB provided a sputum sample (see ``sputum'' container). An additional container ``maybe'' was provided to consider movements just passing through the TB registration area, but the candidates from this container were only very rarely considered.
+
+We (NB, RS, DK, LF) initially went through all movements in the ``possible'' container and moved the most plausible candidates for TB patients to the ``likely'' container. The ``likely'' candidates were assessed in more detail and interrupted movements rejoined. The most ``likely" candidates were then moved to the ``sure'' container to match in number the the total number of clinical records shown at the top of the left panel. Interrupted movements of ``sure'' TB patient movements were rejoined as far as possible to improve continuous tracking and subsequent modelling of \emph{Mtb} infection risk. Without rejoining TB patient movements in particular, the total amount of infectious quanta generated by TB patients would otherwise be underestimated.
+
+The line chart in the bottom of the right panel showed the timepoints for ``sure'' TB patient movements as they appeared in the area marked in red on the floor plan. The chart helped to verify that there were no implausible overlaps, since only one person at a time could sit on the chair in the red area and have their symptoms and patient characteristics recorded. Furthermore, the chart showed the order in which TB patient movements would ultimately be linked with the clinical records. The order was manually specified in the left panel. Since the exact timestamps in the clinical records were often incorrect, it was not possible to directly match clinical records with person movements based on the exact timestamps in the TB screening area. Instead, clinical records were sorted in ascending order and matched with person movements in the order in which they appeared in the red TB screening area.
+
+We note that only the estimation of the absolute number of \emph{Mtb} infections in the clinic depended on accurate identification of TB patient tracks. In contrast, the effects of operational interventions on transmission were assessed in relative terms and therefore did not depend on the total person-time of TB patient movements (see Appendix C). Only a systematic misclassification of TB patient movements could meaningfully bias the relative effects. However, this is unlikely, as the dataset contained a large number of clear and uninterrupted TB patient movements, which served as reliable templates for identifying and linking additional, partially interrupted movements.
+
+\begin{figure}[H]
+%\includegraphics[width=6.30208in,height=5.30848in]{../../../ShinyApp_Screenshot.png}
+\caption{Screenshot of the R Shiny App to identify TB patient movements. The left panel shows a summary of the data, the currently selected movement, modifiable parameters for choosing links, an option to assign movements to new containers for candidates of TB patient movements (``maybe'', ``possible'', ``likely'', ``sure'', ``sputum''), and an option to modify the order in which the final selection of TB patient movements was matched with the clinical records. The top of the right panel shows the floor plan of the clinic with the currently selected movement in black and possible links in colours. The table below shows the height difference, time difference and distance to each link. The line chart at the bottom shows the order in which ``sure'' TB patient movements appeared in the area marked in red on the floor plan. The blue area shows where TB vitals were collected, the yellow area where symptoms were screened, and the red area is approximately the location TB patients were sitting (one at a time) while their symptoms and characteristics were recorded. Note that the floor plan of the waiting area and the line chart of TB patient movements are trimmed on the right side. What is not shown is that the currently selected movement extends to the bottom-right part of the clinic, where sputum samples were collected.}
+\label{fig:S1}
+\end{figure}
+
+\section{TEXT B: Computation of air exchange rates}\label{text-b}
+
+\subsection{\texorpdfstring{CO\textsubscript{2} levels in the hospital}{CO2 levels in the hospital}}\label{co2-levels-in-the-hospital}
+
+We measured air quality in the waiting area of the clinic using two air quality monitoring devices (AQM1 and AQM2). AQM1 was placed near the area of the waiting hall with the highest spatial clustering of people, therefore its CO\textsubscript{2} levels were typically higher than those of AQM2 (Figure \ref{fig:S2}). We chose the CO\textsubscript{2} levels of AQM1 to compute air exchange rates (AERs), opting for a more conservative assessment of ventilation conditions in the clinic. AERs were computed using two different models, based on time-varying CO\textsubscript{2} levels and occupancy. For the main analysis, we used the AERs as computed by the transient mass balance model because it considers temporal variation in occupancy and CO\textsubscript{2} levels.
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=3.69444in]{../../../../results/environmental_co2_over_time_by_device.png}
+\caption{Daytime CO\textsubscript{2} levels by device in the waiting area of the hospital. AQM1 was placed where spatial clustering of people in the clinic was higher. Median as lines and interquartile range as ribbons.}
+\label{fig:S2}
+\end{figure}
+
+\subsection{Transient mass balance model}\label{transient-mass-balance-model}
+
+In the main analysis, we report the AER from the transient mass balance model. This model considers temporal variation in occupancy and CO\textsubscript{2} levels \cite{batterman2017IntJEnvResPublicHealth}. Formally,
+
+\[CO_{t + 1} = \frac{6 \cdot 10^{4}\  \cdot n_{t} \cdot G}{Q} \cdot (1 - \exp( - QV\Delta t)) + (CO_{t} - CO_{out}) \cdot \exp( - QV\Delta t) + CO_{out}~,\]
+
+where
+
+\begin{itemize}
+\item
+\(CO_{t + 1}\) is the indoor CO\textsubscript{2} level (mixing ratio) at time \(t + 1\),
+\item
+\(n_{t}\) is the number of people in the clinic waiting area (occupancy),
+\item
+\(G\) is the average CO\textsubscript{2} generation rate per person (\(G =\)0.24L/min) \cite{persily2017IndoorAir},
+\item
+\(Q = AER/V\) is the outdoor air supply rate (estimated in m\textsuperscript{3}/s \(\cdot \frac{1}{3600})\),
+\item
+\(V\) is the volume of waiting hall (\(V\)=1179m\textsuperscript{3}),
+\item
+\(\Delta t\) is the time interval between measurements (\(\Delta t\)=5 min for air quality), and
+\item
+\(CO_{out}\) is the CO\textsubscript{2} mixing ratio in outdoor air (estimated but constrained to a range of \(CO_{out} = \lbrack 300,500\rbrack\) ppm).
+\end{itemize}
+
+We numerically solve the transient mass balance model with the limited memory Broyden--Fletcher--Goldfarb--Shanno algorithm (L-BFGS), a quasi-Newton method \cite{byrd1995SIAMJSciComput}. The optimal solution is the outdoor air supply rate \(Q\) that minimises the root mean square error. \(Q\) was then converted to the \(AER\) by multiplying it with the volume \(V\) of the clinic waiting hall.
+
+\subsection{Steady state model}\label{steady-state-model}
+
+Additionally, we estimated the AER using a steady state model. Under steady state conditions, CO\textsubscript{2} levels are assumed to reach a steady state mixing ratio \cite{batterman2017IntJEnvResPublicHealth}, in which case the AER can be computed from as
+
+\[AER\  = \ \frac{6 \cdot 10^{4}\  \cdot n_{\max} \cdot G}{V \cdot (CO_{\max} - CO_{out})}~,\]
+
+where n\textsubscript{max} is the daily maximum number of people in the clinic's waiting area (peak occupancy) and CO\textsubscript{max} is the daily maximum indoor CO\textsubscript{2} level (peak concentration). \(CO_{out}\) was taken to be the daily minimum indoor CO\textsubscript{2} level, which was reached during the night when the clinic was barely occupied. 
+
+We compared the AERs between the steady state and transient mass balance model in Figure \ref{fig:S3}.   
+
+\section{TEXT C: Modelling airborne transmission risk and estimating the effects of interventions}\label{text-c}
+
+\subsection{Spatiotemporal Wells-Riley model}\label{spatiotemporal-wells-riley-model}
+
+In the Wells-Riley model \cite{riley1978AmJEpidemiol}, the risk of \emph{Mtb} infection (\(P\)) is estimated as the ratio of the number of diseased cases (\(D\)) among susceptible individuals (\(S\)) as
+
+\[D/S = P = 1 - exp( - p \cdot N)~,\]
+
+where \(p\) is the breathing rate and \(N\) is the cumulate quanta concentration (doses of infectious particles) that was generated by infectious individuals and to which susceptible individuals were exposed.
+
+The Wells-Riley model assumes that the quanta concentration is the same in every location of the indoor space. In contrast, our spatiotemporal extension of the model allows for local variation of the quanta concentration in the indoor space over time \cite{banholzer2025PLOSComputBiol}. The area of the indoor space is thereby rasterised into a grid of cells \(c\) and each individual track of a person movement \(j\) is assigned to the nearest cell. The risk of infection is computed for each \(j\) as
+
+\[P_{j} = 1 - \exp( - \sum_{c,t}^{}N_{c,t} \cdot f_{c}(j,t) \cdot p_{j}(a,t) \cdot 1s)~,\]
+
+where \(f_{c}(j,t)\) is the indicator function (1 if \(j\) was in \(c\) at time \(t\), 0 otherwise) and \(p_{j}(a,t)\) is the breathing rate specific to activity \(a\). The spatiotemporal quanta concentration is estimated as
+
+\[N_{c,t} = D\Delta{(N}_{c,t - 1} + \frac{1}{V_{c}} \cdot \sum_{i \in c}^{}{q_{i}(a,t) \cdot 1s)} \cdot \exp( - (AER_{t} + \lambda + k) \cdot 1s))~,\]
+
+where \(N_{c,t}\)is the concentration in \(c\) at \(t\) (quanta/m\textsuperscript{3}), D is the diffusion constant (m/s\textsuperscript{2}), \(\Delta\) is the second-order Laplace operator, \(q_{i}(a,t)\) is the activity-specific quanta generation rate (quanta/s) by TB patient movement \(i\), \(V_{c}\) is the cell volume (m\textsuperscript{3}), \(AER_{t}\) is the air exchange rate, \(\lambda\) is the bacterial inactivation rate, and \(k\) is the gravitational settling rate (1/s).
+
+\subsection{Modelling assumptions}\label{modelling-assumptions}
+
+We made the same assumptions about the generation, diffusion, removal and inhalation of quanta as in our previous work \cite{banholzer2025PLOSComputBiol}. Briefly, the quanta generation rate was sampled from activity-specific lognormal prior distributions with median rates of 1--3 quanta per hour. The spatial diffusion constant was related to the air exchange rate, and the quanta removal rate was the sum of the air exchange, bacterial inactivation and gravitational settling rate. Since airflow and breathing direction were unknown, we assumed that the quanta diffused radially from the infectious source. We distinguished between walking and waiting activities based on whether a person covered a distance of more or less than 0.25m/s. We also assumed that the air was vertically well-mixed, meaning that the quanta concentration was the same within cubic cells. Although hospital staff consistently wore masks throughout the study as compared to hospital attendees, we did model reduced quanta exposure due to masks to compare Mtb infection risk in isolation of other protective measures in place.
+
+One deviation from our previous work was that we no longer simulated a random subset of asymptomatic TB patients as potential infectious quanta sources. Instead, we considered people with presumptive TB potentially infectious, as \emph{Mtb} has previously been detected in the exhaled breath of presumptive TB cases despite negative Sputum-Xpert test results \cite{patterson2024ProcNatlAcadSci}. This change reflects two methodological differences. First, the identification of presumptive TB cases was more systematic through routine symptom-based screening according to WHO guidelines, providing a clearer basis for defining potential infectious sources. Second, we could only manually rejoin interrupted person tracks of TB patients in this study, whereas in the previous study we could manually rejoin all tracks due to a shorter observation period (five days in the previous vs. 52 days in this study). Consequently, most random tracks of non-TB attendees would have been too short to meaningfully model quanta generation from asymptomatic individuals.
+
+We rasterised the waiting area into a grid of cubic cells each with a squared area and a length of 0.5m. Person tracks were assigned to the nearest cell. Initial quanta generation was limited to the cell of the infectious source. To simplify modelling, we only considered the spread of quanta through the waiting area that was monitored by our optical sensors. We note that quanta may have spread further along the corridors into other parts of the clinic. In the rectangular grid of the waiting area, we masked cells pertaining to rooms or walls, which means that the quanta concentration was always zero in these cells.
+
+We estimated the \emph{Mtb} infection risk under uncertainty using Monte Carlo simulations \cite{banholzer2025PLOSComputBiol,banholzer2024PLOSGlobalPublicHealth}. In each simulation, we assumed people with confirmed TB were always infectious and people with presumptive TB potentially infectious. The proportion of presumptive TB patients who were infectious was sampled from a Uniform(0.1, 0.3) prior, reflecting diagnostic test sensitivity of the Xpert MTB/RIF assay \cite{dorman2018LancetInfectDis}, and the patients were sampled at random. In the main analysis, people with confirmed and presumptive TB were considered equally infectious, but the quanta generation rates were sampled at random and thus could vary between TB patients in each model run.
+
+Quanta generation and removal rates were sampled from lognormal prior distributions, thus the \emph{Mtb} infection risk varied considerably between simulations. We performed 100 Monte Carlo simulations and computed statistical quantities that were more robust to this variation (see below). We summarised our modelling results with the median and 95\%-quantile in the main text and show the full distribution in supplementary figures of Appendix D.
+
+\subsection{Modelled outcome measures}\label{modelled-outcome-measures}
+
+Our model returned the risk of infection \emph{P} per person movement \emph{j}. These risks were aggregated to compute the expected number of \emph{Mtb} infections \emph{EI} as
+
+\[EI = \sum_{j}^{}P_{j}~.\]
+
+This outcome was computed per day, study phase and overall. The hourly rate of infection \emph{R} was computed as
+
+\[R = EI/PT \cdot 3600 \; \text{h}^{-1}~,\]
+
+where \(PT = \sum_{j}^{}{}T_{j\ }\) is the total person-time in the clinic waiting area. The hourly risk of infection can be computed separately for female and male attendees and stratified by healthcare worker status. Finally, we computed the expected time until infection \emph{TTI} as
+
+\[TTI = 1/R \; \text{h}~.\]
+
+\subsection{Estimating the effects of interventions}\label{estimating-the-effects-of-interventions}
+
+Our modelled risk of \emph{Mtb} transmission depended on proximity, but could also vary with the number of infectious people visiting the clinic. To isolate the effects of interventions targeting proximity (Table \ref{tab:S1}), we estimated the risk of TB infection using two model configurations:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  The first configuration assumed a non-uniform mixed (N\(UM\)) airspace, where the infection risk depended on the proximity to infectious individuals. In other words, the quanta concentration varied both over space and time as described above: \(N_{c,t}\).
+\item
+  The second configuration assumed a uniform mixed \((UM)\) airspace, where everyone in the waiting area at timepoint \(t\) had the same quanta exposure regardless of proximity to the infectious individual. In other words, the quanta concentration varied only over time and was equal to the average concentration in the space: \(N_{c,t} = {\bar{N}}_{t} = 1/\sum_{c}^{}{}N_{c,t}\).
+\end{enumerate}
+
+Accordingly, the transmission risks were denoted as \(P_{NUM}\) and \(P_{UM}\) and the expected number of infections as \({EI}_{NUM}\) and \({EI}_{UM}\). We computed the rate ratio as
+
+\[RR = R_{NUM}/R_{UM} = EI_{NUM}/EI_{UM}~.\]
+
+Since the total person-time is identical for both model configurations, it cancels out. Note that as spatial clustering of people decreases, the physical distance between individuals increases (proximity decreases), which reduces the risk of short-range, high particle-density exposure. Thus, we would expect that interventions targeting proximity reduce the rate ratio.
+
+We modelled the effects of interventions on the daily rate ratio as
+
+\[\log(RR_{d}) - \ log(PT_{d}) = \alpha\  \cdot Weekday_{d} + \beta \cdot Phase_{d}~,\]
+
+where \(\log(RR_{d})\) is the log rate ratio on day \(d\), \(log(PT_{d})\) is the log of the total person time, \(Weekday_{d}\ \)are binary indicators for the day of the week (Monday to Sunday, with Monday as the reference), and \(Phase_{d}\) are binary indicators for the study phase (first and second intervention, with baseline as reference). We adjusted our estimates for weekday fixed-effects because our study team noted difficulties in enforcing interventions on some days, especially Mondays, when the clinic was most frequented and patients tended to be less compliant with interventions.
+
+The rationale for \(\log(PT_{d})\) as a model offset is the following. Higher occupancy naturally increases the number of close-proximity interactions and thus the rate ratio. Therefore, we used \(\log(PT_{d})\) as a model offset, so that the effects of interventions on \emph{Mtb} transmission only reflect the changes in the spatial clustering of people in the clinic waiting area. In the main text, we refer to \(RR_{d}/PT_{d}\) as the adjusted rate ratio. Note that while the daily expected number of \emph{Mtb} infections showed a decreasing trend over the study (Figure \ref{fig:S9}) -- probably reflecting reduced clinic attendance of both infectious and susceptible patients -- the adjusted rate ratio was more stable (Figure \ref{fig:S10}).
+
+Finally, we estimated how many \emph{Mtb} infections may have been prevented by interventions. For this, we obtained posterior draws for the daily log rate \({\widetilde{RR}}_{d}\) ratios from our Bayesian model assuming routine conditions throughout the study. These log rate ratios were converted to the number of \emph{Mtb} infections without interventions according to the NUM model \({\widetilde{EI}}_{NUM}\), assuming the same number of infections according to the UM model \({EI}_{UM}\) and total person time \(PT_{d}\). We then computed the number of prevented infections as the difference between \({\widetilde{EI}}_{NUM}\) (without interventions) and \({EI}_{NUM}\) (with interventions).
+
+\section{Supplementary results}\label{appendix-d}
+
+\subsection{Supplementary results tables}\label{supplementary-results-tables}
+
+\captionof{table}{Linelist data of TB patients. TB status was confirmed if patients by a positive Xpert MTB or chest X-ray examination, otherwise they remained presumptive. Six patients were already on anti-TB treatment. Note that HIV status was self-reported and was not confirmed through diagnosis.}
+\label{tab:S2}
+
+{\small
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0605}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1055}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0664}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.0586}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1367}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1816}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.2148}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 14\tabcolsep) * \real{0.1758}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\textbf{ID}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{Date}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{Age}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{Sex}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{HIV status}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{TB status}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{Xpert MTB/RIF}
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\textbf{Chest X-ray}
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+118 & Jun 17 & 23 & M & HIV- & Presumptive & Not detected & Not done \\
+119 & Jun 17 & 15 & F & HIV- & Presumptive & Not detected & Not done \\
+120 & Jun 17 & 29 & M & HIV- & Confirmed & Not detected & Positive \\
+121 & Jun 17 & 44 & F & HIV- & Presumptive & Not detected & Not done \\
+122 & Jun 17 & 69 & F & HIV+ & Presumptive & Not detected & Not done \\
+123 & Jun 17 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+124 & Jun 17 & 68 & F & HIV- & Presumptive & Not detected & Not done \\
+125 & Jun 17 & 40 & M & HIV- & Presumptive & Not detected & Not done \\
+126 & Jun 17 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+127 & Jun 17 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+128 & Jun 17 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+129 & Jun 17 & 23 & M & HIV- & Presumptive & Not submitted & Not done \\
+130 & Jun 17 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+131 & Jun 17 & 31 & F & HIV+ & Presumptive & Not detected & Not done \\
+132 & Jun 17 & 45 & M & HIV+ & Presumptive & Not detected & Not done \\
+133 & Jun 17 & 49 & F & HIV- & Presumptive & Not detected & Not done \\
+134 & Jun 17 & 66 & F & Unknown & Presumptive & Not detected & Not done \\
+135 & Jun 17 & 43 & M & HIV- & Confirmed & Detected (Low) & Not done \\
+136 & Jun 17 & 39 & M & HIV- & Presumptive & Not detected & Not done \\
+137 & Jun 18 & 24 & M & Unknown & Presumptive & Not detected & Not done \\
+138 & Jun 18 & 22 & F & Unknown & Presumptive & Not detected & Not done \\
+139 & Jun 18 & 17 & F & Unknown & Presumptive & Not detected & Not done \\
+140 & Jun 18 & 24 & M & HIV- & Presumptive & Not submitted & Not done \\
+141 & Jun 18 & 55 & F & Unknown & Presumptive & Not detected & Not done \\
+142 & Jun 18 & 35 & F & HIV- & Presumptive & Not detected & Not done \\
+143 & Jun 18 & 30 & F & HIV- & Presumptive & Not detected & Not done \\
+144 & Jun 18 & 20 & F & HIV+ & Presumptive & Not detected & Not done \\
+145 & Jun 18 & 30 & F & HIV- & Presumptive & Not detected & Not done \\
+146 & Jun 18 & 52 & F & HIV+ & Presumptive & Not detected & Not done \\
+147 & Jun 18 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+148 & Jun 18 & 46 & M & HIV+ & Presumptive & Not detected & Not done \\
+149 & Jun 18 & 38 & F & HIV+ & Presumptive & Not detected & Not done \\
+150 & Jun 18 & 30 & M & HIV- & Presumptive & Not detected & Not done \\
+151 & Jun 18 & 16 & F & HIV- & Presumptive & Not submitted & Not done \\
+152 & Jun 18 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+153 & Jun 18 & 66 & F & HIV- & Presumptive & Not detected & Not done \\
+154 & Jun 19 & 23 & M & HIV- & Presumptive & Not detected & Not done \\
+155 & Jun 19 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+156 & Jun 19 & 34 & M & HIV- & Presumptive & Not detected & Not done \\
+157 & Jun 19 & 18 & M & Unknown & Presumptive & Not detected & Not done \\
+158 & Jun 19 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+159 & Jun 19 & 36 & M & HIV- & Presumptive & Not detected & Not done \\
+160 & Jun 19 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+161 & Jun 19 & 49 & F & HIV- & Presumptive & Not detected & Not done \\
+162 & Jun 19 & 16 & M & Unknown & Presumptive & Not detected & Not done \\
+163 & Jun 19 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+164 & Jun 19 & 43 & F & HIV+ & Presumptive & Not detected & Not done \\
+165 & Jun 19 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+166 & Jun 19 & 16 & F & Unknown & Presumptive & Not detected & Not done \\
+167 & Jun 19 & 32 & F & Unknown & Presumptive & Not detected & Not done \\
+168 & Jun 20 & 31 & M & HIV- & Presumptive & Not detected & Not done \\
+169 & Jun 20 & 17 & F & Unknown & Presumptive & Not detected & Not done \\
+170 & Jun 20 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+171 & Jun 20 & 21 & F & Unknown & Presumptive & Not detected & Not done \\
+172 & Jun 20 & 44 & F & HIV- & Presumptive & Not detected & Not done \\
+173 & Jun 20 & 42 & F & HIV- & Presumptive & Not detected & Not done \\
+174 & Jun 20 & 22 & F & HIV- & Presumptive & Not submitted & Not done \\
+175 & Jun 20 & 35 & F & HIV- & Presumptive & Not detected & Not done \\
+176 & Jun 20 & 59 & F & Unknown & Presumptive & Not detected & Not done \\
+177 & Jun 20 & 36 & F & HIV- & On treatment & Detected (Medium) & Suspicious TB \\
+178 & Jun 20 & 23 & F & HIV- & Presumptive & Not detected & Not done \\
+179 & Jun 20 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+180 & Jun 20 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+181 & Jun 20 & 24 & F & HIV- & Confirmed & Detected (High) & Not done \\
+182 & Jun 20 & 25 & M & HIV- & Confirmed & Detected (Trace) & Not done \\
+183 & Jun 20 & 40 & M & HIV- & Confirmed & Detected (Low) & Not done \\
+184 & Jun 20 & 33 & F & HIV+ & On treatment & Not submitted & Not done \\
+185 & Jun 20 & 35 & F & HIV+ & Presumptive & Not detected & Not done \\
+186 & Jun 20 & 31 & M & HIV- & Presumptive & Not detected & Not done \\
+187 & Jun 20 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+188 & Jun 20 & 28 & M & HIV+ & Presumptive & Not detected & Not done \\
+189 & Jun 20 & 49 & F & HIV- & Presumptive & Not detected & Not done \\
+190 & Jun 20 & 46 & F & HIV- & Presumptive & Not detected & Not done \\
+191 & Jun 20 & 33 & F & HIV- & Presumptive & Not detected & Not done \\
+192 & Jun 20 & 33 & F & HIV+ & Presumptive & Not detected & Not done \\
+239 & Jun 23 & 60 & M & HIV- & Presumptive & Not detected & Not done \\
+240 & Jun 23 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+241 & Jun 23 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+242 & Jun 23 & 52 & M & HIV+ & Presumptive & Not detected & Not done \\
+243 & Jun 23 & 44 & F & HIV+ & Presumptive & Not detected & Not done \\
+244 & Jun 23 & 36 & M & HIV- & Presumptive & Not detected & Not done \\
+245 & Jun 23 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+246 & Jun 23 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+247 & Jun 23 & 9 & M & HIV- & Presumptive & Not detected & Not done \\
+248 & Jun 23 & 27 & M & Unknown & Presumptive & Not detected & Not done \\
+249 & Jun 23 & 33 & F & HIV- & Presumptive & Not detected & Not done \\
+250 & Jun 23 & 20 & M & NA & Presumptive & Not submitted & Not done \\
+251 & Jun 23 & 23 & M & HIV- & Presumptive & Not submitted & Not done \\
+252 & Jun 23 & 68 & F & HIV- & Presumptive & Not detected & Not done \\
+253 & Jun 23 & 39 & M & HIV- & Presumptive & Not detected & Not done \\
+254 & Jun 23 & 28 & F & HIV- & Presumptive & Not detected & Not done \\
+255 & Jun 24 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+256 & Jun 24 & 49 & M & Unknown & Presumptive & Not detected & Not done \\
+257 & Jun 24 & 37 & M & HIV- & Presumptive & Not detected & Not done \\
+258 & Jun 24 & 41 & M & Unknown & Presumptive & Not detected & Not done \\
+259 & Jun 24 & 32 & M & Unknown & Presumptive & Not detected & Not done \\
+260 & Jun 24 & 55 & M & HIV- & Presumptive & Not detected & Not done \\
+261 & Jun 24 & 30 & M & Unknown & Presumptive & Not detected & Not done \\
+262 & Jun 24 & 18 & F & Unknown & Presumptive & Not detected & Not done \\
+263 & Jun 24 & 49 & M & HIV- & Presumptive & Not detected & Not done \\
+264 & Jun 24 & 50 & M & HIV- & Presumptive & Not detected & Not done \\
+265 & Jun 24 & 42 & M & HIV- & Presumptive & Not detected & Not done \\
+266 & Jun 24 & 28 & M & Unknown & Presumptive & Not detected & Not done \\
+267 & Jun 24 & 23 & F & HIV- & Presumptive & Not detected & Not done \\
+268 & Jun 24 & 42 & M & HIV- & Presumptive & Not detected & Not done \\
+269 & Jun 24 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+270 & Jun 24 & 38 & F & HIV- & Presumptive & Not detected & Not done \\
+271 & Jun 24 & 48 & F & HIV- & Presumptive & Not detected & Not done \\
+272 & Jun 24 & 36 & F & HIV- & Presumptive & Not detected & Not done \\
+273 & Jun 24 & 45 & M & HIV- & Presumptive & Not detected & Not done \\
+274 & Jun 24 & 31 & F & HIV+ & Presumptive & Not detected & Not done \\
+275 & Jun 24 & 44 & M & HIV- & Presumptive & Not detected & Not done \\
+276 & Jun 24 & 53 & F & HIV- & Presumptive & Not detected & Not done \\
+277 & Jun 24 & 48 & M & HIV+ & Presumptive & Not detected & Not done \\
+278 & Jun 24 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+279 & Jun 25 & 23 & F & HIV- & Presumptive & Not detected & Not done \\
+280 & Jun 25 & 78 & F & HIV- & Presumptive & Not detected & Not done \\
+281 & Jun 25 & 53 & F & HIV- & Presumptive & Not detected & Not done \\
+282 & Jun 25 & 64 & F & HIV- & Presumptive & Not detected & Not done \\
+283 & Jun 25 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+284 & Jun 25 & 29 & F & HIV- & Presumptive & Not detected & Not done \\
+285 & Jun 25 & 29 & M & Unknown & Presumptive & Not detected & Not done \\
+286 & Jun 25 & 18 & M & HIV- & Presumptive & Not detected & Not done \\
+287 & Jun 25 & 34 & M & HIV- & Presumptive & Not detected & Not done \\
+288 & Jun 25 & 30 & F & HIV- & Presumptive & Not detected & Not done \\
+289 & Jun 25 & 19 & F & Unknown & Presumptive & Not detected & Not done \\
+290 & Jun 25 & 23 & M & HIV- & Presumptive & Not detected & Not done \\
+291 & Jun 25 & 30 & M & HIV- & Confirmed & Detected (High) & Not done \\
+292 & Jun 25 & 54 & M & Unknown & Presumptive & Not detected & Not done \\
+293 & Jun 25 & 15 & F & Unknown & Presumptive & Not detected & Not done \\
+294 & Jun 25 & 27 & M & HIV- & Confirmed & Detected (Low) & Not done \\
+295 & Jun 25 & 36 & M & HIV- & Presumptive & Not submitted & Not done \\
+296 & Jun 25 & 35 & F & HIV- & Presumptive & Not submitted & Not done \\
+297 & Jun 25 & 40 & F & HIV- & Presumptive & Not submitted & Not done \\
+298 & Jun 25 & 49 & F & HIV- & Presumptive & Not submitted & Not done \\
+299 & Jun 26 & 29 & M & HIV- & Presumptive & Not detected & Negative \\
+300 & Jun 26 & 36 & F & HIV+ & Presumptive & Not detected & Not done \\
+301 & Jun 26 & 39 & M & HIV+ & Presumptive & Not detected & Not done \\
+302 & Jun 26 & 37 & M & HIV- & Presumptive & Not detected & Not done \\
+303 & Jun 26 & 40 & M & HIV- & Presumptive & Not detected & Not done \\
+304 & Jun 26 & 47 & M & HIV- & Presumptive & Not detected & Negative \\
+305 & Jun 26 & 19 & M & HIV- & Presumptive & Not detected & Not done \\
+306 & Jun 26 & 40 & M & HIV- & Presumptive & Not detected & Not done \\
+307 & Jun 26 & 37 & F & NA & Presumptive & Not detected & Not done \\
+308 & Jun 26 & 23 & M & HIV- & Presumptive & Not detected & Not done \\
+309 & Jun 26 & 16 & F & HIV- & Presumptive & Not detected & Not done \\
+310 & Jun 26 & 50 & M & HIV- & Presumptive & Not detected & Not done \\
+311 & Jun 26 & 34 & M & NA & Presumptive & Not detected & Negative \\
+312 & Jun 26 & 18 & F & HIV- & Presumptive & Not detected & Not done \\
+313 & Jun 26 & 22 & F & HIV- & Presumptive & Not detected & Not done \\
+314 & Jun 26 & 36 & M & HIV- & Presumptive & Not detected & Not done \\
+315 & Jun 26 & 43 & M & HIV- & Presumptive & Not detected & Not done \\
+316 & Jun 26 & 46 & F & HIV- & Presumptive & Not detected & Not done \\
+317 & Jun 26 & 18 & M & HIV- & Presumptive & Not detected & Not done \\
+318 & Jun 26 & 38 & M & HIV- & Presumptive & Not detected & Negative \\
+319 & Jun 26 & 24 & M & HIV- & Presumptive & Not submitted & Not done \\
+320 & Jun 26 & 24 & F & HIV- & Presumptive & Not detected & Negative \\
+321 & Jun 26 & 16 & M & HIV- & Presumptive & Not detected & Negative \\
+322 & Jun 26 & 74 & F & HIV- & Presumptive & Not detected & Negative \\
+363 & Jun 29 & 30 & F & HIV+ & Presumptive & Not detected & Not done \\
+364 & Jun 29 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+365 & Jun 29 & 32 & M & HIV- & Confirmed & Not detected & Positive \\
+366 & Jun 29 & 20 & M & Unknown & Presumptive & Not detected & Not done \\
+367 & Jun 29 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+368 & Jun 29 & 19 & M & NA & Presumptive & Not detected & Not done \\
+369 & Jun 29 & 30 & F & HIV- & Presumptive & Not submitted & Not done \\
+370 & Jun 29 & 40 & F & HIV- & Presumptive & Not detected & Not done \\
+371 & Jun 29 & 38 & F & HIV+ & Presumptive & Not detected & Negative \\
+372 & Jun 29 & 17 & M & HIV+ & Presumptive & Not detected & Negative \\
+373 & Jun 29 & 19 & F & HIV- & Presumptive & Not detected & Not done \\
+374 & Jun 29 & 54 & F & HIV- & Presumptive & Not detected & Not done \\
+375 & Jun 29 & 42 & F & HIV+ & Presumptive & Not detected & Negative \\
+376 & Jun 29 & 47 & F & HIV- & Presumptive & Not detected & Not done \\
+377 & Jun 29 & 47 & M & HIV- & Presumptive & Not detected & Not done \\
+378 & Jun 29 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+379 & Jun 29 & 40 & F & HIV- & Presumptive & Not detected & Not done \\
+380 & Jun 29 & 21 & F & HIV- & Presumptive & Not detected & Not done \\
+381 & Jun 29 & 22 & F & HIV- & Presumptive & Not detected & Negative \\
+382 & Jun 29 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+383 & Jun 29 & 57 & M & HIV- & Presumptive & Not detected & Not done \\
+384 & Jun 29 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+385 & Jun 29 & 16 & F & HIV- & Presumptive & Not detected & Not done \\
+386 & Jun 29 & 18 & F & HIV- & Presumptive & Not submitted & Not done \\
+387 & Jun 29 & 16 & F & Unknown & Presumptive & Not detected & Not done \\
+388 & Jun 29 & 18 & F & HIV- & Presumptive & Not submitted & Not done \\
+389 & Jun 29 & 58 & F & Unknown & Presumptive & Not detected & Not done \\
+390 & Jun 29 & 63 & M & HIV+ & Presumptive & Not detected & Negative \\
+391 & Jun 29 & 34 & M & HIV- & Presumptive & Not detected & Negative \\
+392 & Jun 29 & 28 & F & HIV- & Presumptive & Not detected & Not done \\
+393 & Jun 29 & 18 & F & HIV- & Presumptive & Not detected & Not done \\
+394 & Jun 29 & 57 & M & HIV+ & Presumptive & Not detected & Not done \\
+395 & Jun 29 & 28 & F & HIV- & Presumptive & Not detected & Not done \\
+396 & Jun 29 & 20 & F & HIV- & Presumptive & Not submitted & Not done \\
+397 & Jun 29 & 25 & F & HIV- & Presumptive & Not detected & Not done \\
+420 & Jul 01 & 50 & F & HIV- & Presumptive & Not detected & Not done \\
+421 & Jul 01 & 17 & F & HIV- & Presumptive & Not detected & Not done \\
+422 & Jul 01 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+423 & Jul 01 & 83 & M & HIV- & Presumptive & Not detected & Not done \\
+424 & Jul 01 & 28 & F & HIV- & Presumptive & Not detected & Not done \\
+425 & Jul 01 & 14 & F & Unknown & Presumptive & Not detected & Not done \\
+426 & Jul 01 & 47 & M & HIV- & Presumptive & Not detected & Not done \\
+427 & Jul 01 & 35 & F & HIV- & Presumptive & Not detected & Not done \\
+428 & Jul 01 & 34 & M & HIV- & Presumptive & Not detected & Not done \\
+429 & Jul 01 & 57 & M & HIV- & Presumptive & Not detected & Not done \\
+430 & Jul 01 & 13 & F & HIV- & Presumptive & Not detected & Negative \\
+431 & Jul 01 & 20 & M & HIV- & Presumptive & Not detected & Negative \\
+432 & Jul 01 & 25 & M & Unknown & Presumptive & Not detected & Not done \\
+433 & Jul 01 & 19 & M & HIV- & Presumptive & Not detected & Not done \\
+434 & Jul 01 & 16 & F & Unknown & Presumptive & Not detected & Not done \\
+435 & Jul 01 & 17 & F & HIV+ & Presumptive & Not detected & Not done \\
+436 & Jul 01 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+437 & Jul 01 & 26 & M & HIV+ & Presumptive & Not detected & Not done \\
+438 & Jul 01 & 45 & F & HIV+ & Presumptive & Invalid & Not done \\
+439 & Jul 01 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+440 & Jul 01 & 18 & F & Unknown & Presumptive & Not detected & Not done \\
+441 & Jul 01 & 30 & F & Unknown & Presumptive & Not detected & Not done \\
+442 & Jul 01 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+443 & Jul 01 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+444 & Jul 01 & 34 & M & HIV+ & Presumptive & Not detected & Not done \\
+445 & Jul 01 & 22 & F & HIV- & Presumptive & Not detected & Not done \\
+446 & Jul 01 & 16 & M & HIV- & Presumptive & Not detected & Not done \\
+447 & Jul 01 & 23 & F & HIV- & Presumptive & Not detected & Not done \\
+448 & Jul 01 & 18 & F & HIV- & Presumptive & Not detected & Not done \\
+449 & Jul 01 & 21 & F & HIV- & Presumptive & Not detected & Not done \\
+450 & Jul 01 & 21 & F & HIV- & Presumptive & Not detected & Not done \\
+451 & Jul 01 & 18 & M & HIV- & Presumptive & Not detected & Not done \\
+452 & Jul 01 & 15 & M & Unknown & Presumptive & Not detected & Not done \\
+453 & Jul 01 & 15 & M & Unknown & Presumptive & Not detected & Not done \\
+454 & Jul 01 & 22 & F & HIV- & Presumptive & Not detected & Not done \\
+455 & Jul 01 & 40 & M & HIV- & Presumptive & Not detected & Not done \\
+456 & Jul 01 & 17 & F & HIV- & Presumptive & Not detected & Negative \\
+457 & Jul 01 & 30 & F & HIV- & Presumptive & Not submitted & Not done \\
+458 & Jul 01 & 19 & M & HIV- & Presumptive & Not detected & Not done \\
+459 & Jul 01 & 48 & F & HIV- & Presumptive & Not detected & Not done \\
+460 & Jul 01 & 30 & M & HIV- & Presumptive & Not detected & Not done \\
+461 & Jul 01 & 26 & M & Unknown & Presumptive & Not detected & Not done \\
+462 & Jul 01 & 90 & M & HIV- & Presumptive & Not detected & Not done \\
+505 & Jul 03 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+506 & Jul 03 & 17 & F & Unknown & Presumptive & Not detected & Not done \\
+507 & Jul 03 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+508 & Jul 03 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+509 & Jul 03 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+510 & Jul 03 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+511 & Jul 03 & 86 & F & HIV- & Presumptive & Not detected & Not done \\
+512 & Jul 03 & 33 & F & HIV- & Presumptive & Not detected & Not done \\
+513 & Jul 03 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+514 & Jul 03 & 28 & M & HIV- & Presumptive & Not submitted & Not done \\
+515 & Jul 03 & 23 & F & HIV- & Presumptive & Not detected & Not done \\
+516 & Jul 03 & 40 & M & HIV- & Presumptive & Not detected & Not done \\
+517 & Jul 03 & 50 & F & HIV+ & Presumptive & Not detected & Not done \\
+518 & Jul 03 & 22 & M & HIV- & Presumptive & Not detected & Not done \\
+519 & Jul 03 & 39 & M & HIV- & Presumptive & Not detected & Not done \\
+520 & Jul 03 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+521 & Jul 03 & 32 & F & HIV- & Presumptive & Not detected & Not done \\
+522 & Jul 03 & 32 & F & HIV+ & Presumptive & Not detected & Not done \\
+523 & Jul 03 & 17 & F & Unknown & Presumptive & Not detected & Not done \\
+524 & Jul 03 & 46 & M & HIV- & Presumptive & Not detected & Not done \\
+525 & Jul 03 & 59 & M & HIV+ & Presumptive & Not detected & Not done \\
+526 & Jul 03 & 44 & M & HIV- & Presumptive & Not detected & Not done \\
+527 & Jul 03 & 23 & F & HIV- & Presumptive & Not submitted & Not done \\
+528 & Jul 04 & 59 & M & HIV+ & Presumptive & Not detected & Not done \\
+529 & Jul 04 & 47 & F & HIV- & Presumptive & Not submitted & Not done \\
+530 & Jul 04 & 29 & F & HIV- & Presumptive & Not detected & Not done \\
+531 & Jul 04 & 52 & M & HIV- & Presumptive & Not detected & Not done \\
+532 & Jul 04 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+533 & Jul 04 & 72 & F & Unknown & Presumptive & Not detected & Not done \\
+534 & Jul 04 & 38 & M & HIV- & Presumptive & Not detected & Not done \\
+535 & Jul 04 & 22 & M & HIV- & Presumptive & Not detected & Not done \\
+536 & Jul 04 & 45 & F & HIV- & Presumptive & Not detected & Not done \\
+537 & Jul 04 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+538 & Jul 05 & 22 & M & HIV- & Presumptive & Not detected & Not done \\
+539 & Jul 05 & 42 & M & HIV+ & Presumptive & Not detected & Not done \\
+540 & Jul 05 & 46 & F & HIV+ & Presumptive & Not detected & Not done \\
+541 & Jul 05 & 21 & F & HIV- & Presumptive & Not detected & Not done \\
+542 & Jul 05 & 51 & F & HIV- & Presumptive & Not detected & Not done \\
+543 & Jul 05 & 15 & M & HIV- & Presumptive & Not detected & Not done \\
+544 & Jul 05 & 15 & M & HIV- & Presumptive & Not submitted & Not done \\
+545 & Jul 05 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+546 & Jul 05 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+547 & Jul 05 & 54 & M & HIV- & Presumptive & Not detected & Not done \\
+548 & Jul 05 & 22 & M & HIV- & Presumptive & Not detected & Negative \\
+549 & Jul 05 & 80 & F & HIV- & Presumptive & Not detected & Not done \\
+550 & Jul 05 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+551 & Jul 05 & 51 & F & HIV+ & Presumptive & Not detected & Not done \\
+552 & Jul 05 & 33 & F & HIV- & Presumptive & Not detected & Not done \\
+553 & Jul 05 & 13 & F & HIV- & Presumptive & Not detected & Not done \\
+554 & Jul 05 & 28 & M & HIV- & Presumptive & Not detected & Negative \\
+555 & Jul 05 & 28 & F & HIV- & Presumptive & Not detected & Not done \\
+556 & Jul 05 & 35 & F & HIV+ & Presumptive & Not detected & Not done \\
+557 & Jul 05 & 67 & F & HIV- & Presumptive & Not detected & Not done \\
+558 & Jul 05 & 35 & F & HIV- & Presumptive & Not detected & Not done \\
+559 & Jul 05 & 42 & M & HIV- & Presumptive & Not detected & Not done \\
+560 & Jul 05 & 55 & M & HIV- & Presumptive & Not detected & Not done \\
+561 & Jul 05 & 72 & M & HIV- & Presumptive & Not detected & Not done \\
+562 & Jul 06 & 33 & F & HIV- & Presumptive & Not detected & Not done \\
+563 & Jul 06 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+564 & Jul 06 & 40 & M & HIV- & Presumptive & Not detected & Not done \\
+565 & Jul 06 & 26 & M & Unknown & Presumptive & Not detected & Not done \\
+566 & Jul 06 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+567 & Jul 06 & 40 & M & HIV+ & On treatment & Not detected & Not done \\
+568 & Jul 06 & 59 & M & HIV- & Presumptive & Not detected & Negative \\
+569 & Jul 06 & 47 & M & HIV- & Presumptive & Not detected & Not done \\
+570 & Jul 06 & 56 & M & HIV- & Presumptive & Not detected & Not done \\
+571 & Jul 06 & 19 & F & HIV- & Presumptive & Not detected & Not done \\
+572 & Jul 06 & 22 & M & HIV- & Presumptive & Not detected & Not done \\
+573 & Jul 06 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+574 & Jul 06 & 28 & M & HIV- & Confirmed & Detected (Low) & Not done \\
+575 & Jul 07 & 45 & F & HIV+ & Presumptive & Not detected & Not done \\
+576 & Jul 07 & 17 & F & HIV- & Presumptive & Not submitted & Not done \\
+577 & Jul 07 & 39 & F & HIV+ & Confirmed & Detected (High) & Not done \\
+578 & Jul 07 & 30 & F & HIV- & Presumptive & Not detected & Not done \\
+579 & Jul 07 & 60 & M & HIV+ & Presumptive & Not detected & Not done \\
+580 & Jul 07 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+581 & Jul 07 & 24 & F & HIV- & Presumptive & Not submitted & Not done \\
+582 & Jul 07 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+583 & Jul 07 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+584 & Jul 07 & 58 & F & HIV- & Presumptive & Not detected & Not done \\
+585 & Jul 07 & 14 & M & HIV- & Presumptive & Not detected & Not done \\
+586 & Jul 07 & 31 & M & HIV- & Presumptive & Not detected & Not done \\
+587 & Jul 07 & 82 & M & HIV- & Presumptive & Not detected & Negative \\
+588 & Jul 07 & 22 & M & HIV- & Presumptive & Not detected & Not done \\
+589 & Jul 07 & 37 & M & HIV+ & Presumptive & Not detected & Not done \\
+590 & Jul 07 & 69 & F & HIV+ & Presumptive & Not detected & Not done \\
+591 & Jul 07 & 52 & M & HIV+ & Presumptive & Not detected & Negative \\
+592 & Jul 07 & 15 & F & Unknown & Presumptive & Not detected & Not done \\
+593 & Jul 07 & 44 & M & Unknown & Confirmed & Detected (High) & Not done \\
+594 & Jul 08 & 33 & M & HIV- & Presumptive & Not detected & Not done \\
+595 & Jul 08 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+596 & Jul 08 & 32 & M & HIV+ & On treatment & Not detected & Not done \\
+597 & Jul 08 & 16 & M & Unknown & Presumptive & Not detected & Not done \\
+598 & Jul 08 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+599 & Jul 08 & 42 & F & HIV+ & Presumptive & Not detected & Not done \\
+600 & Jul 08 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+601 & Jul 08 & 49 & F & HIV- & Presumptive & Not detected & Not done \\
+602 & Jul 08 & 32 & F & HIV- & Presumptive & Not detected & Not done \\
+603 & Jul 08 & 38 & F & HIV- & Presumptive & Not detected & Not done \\
+604 & Jul 08 & 57 & M & HIV+ & Presumptive & Not detected & Not done \\
+605 & Jul 08 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+606 & Jul 08 & 23 & M & HIV- & Presumptive & Not detected & Not done \\
+607 & Jul 08 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+608 & Jul 08 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+609 & Jul 08 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+610 & Jul 08 & 21 & M & Unknown & Confirmed & Detected (Low) & Not done \\
+611 & Jul 08 & 18 & F & Unknown & Presumptive & Not detected & Not done \\
+612 & Jul 08 & 28 & F & HIV- & Presumptive & Not detected & Not done \\
+613 & Jul 08 & 23 & M & Unknown & Presumptive & Not detected & Not done \\
+614 & Jul 08 & 30 & F & HIV+ & Presumptive & Not detected & Not done \\
+615 & Jul 08 & 36 & F & HIV+ & Confirmed & Detected (High) & Not done \\
+616 & Jul 08 & 34 & M & HIV- & Presumptive & Not detected & Not done \\
+617 & Jul 08 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+618 & Jul 09 & 29 & M & Unknown & Presumptive & Not detected & Not done \\
+619 & Jul 09 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+620 & Jul 09 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+621 & Jul 09 & 42 & M & HIV- & Presumptive & Not detected & Not done \\
+622 & Jul 09 & 37 & M & HIV- & Presumptive & Not detected & Negative \\
+623 & Jul 09 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+624 & Jul 09 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+625 & Jul 09 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+626 & Jul 09 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+627 & Jul 09 & 69 & F & HIV- & Presumptive & Not detected & Negative \\
+628 & Jul 09 & 37 & M & HIV- & Presumptive & Not detected & Negative \\
+629 & Jul 09 & 37 & M & HIV- & Presumptive & Not detected & Not done \\
+630 & Jul 09 & 35 & F & HIV+ & Presumptive & Not detected & Not done \\
+631 & Jul 10 & 62 & F & HIV+ & Presumptive & Not detected & Not done \\
+632 & Jul 10 & 52 & F & HIV+ & Presumptive & Not detected & Not done \\
+633 & Jul 10 & 65 & F & HIV- & Presumptive & Not detected & Not done \\
+634 & Jul 10 & 34 & M & HIV- & Presumptive & Not detected & Not done \\
+635 & Jul 10 & 54 & M & HIV- & Presumptive & Not detected & Not done \\
+636 & Jul 10 & 19 & M & HIV- & Presumptive & Not detected & Not done \\
+637 & Jul 10 & 32 & M & Unknown & Presumptive & Not detected & Not done \\
+638 & Jul 10 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+639 & Jul 10 & 16 & F & Unknown & Presumptive & Not detected & Not done \\
+640 & Jul 11 & 48 & F & HIV+ & Presumptive & Not detected & Not done \\
+641 & Jul 11 & 46 & F & HIV- & Presumptive & Not detected & Not done \\
+642 & Jul 11 & 16 & M & HIV- & Presumptive & Not detected & Not done \\
+643 & Jul 11 & 42 & M & HIV- & Presumptive & Not detected & Not done \\
+644 & Jul 11 & 41 & M & HIV- & Presumptive & Not detected & Not done \\
+645 & Jul 11 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+646 & Jul 11 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+647 & Jul 11 & 23 & M & HIV- & Presumptive & Not detected & Not done \\
+648 & Jul 11 & 31 & M & HIV- & Presumptive & Not detected & Not done \\
+649 & Jul 11 & 25 & F & HIV+ & Presumptive & Not detected & Not done \\
+650 & Jul 11 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+651 & Jul 11 & 33 & F & HIV- & Presumptive & Not detected & Not done \\
+652 & Jul 11 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+653 & Jul 11 & 45 & M & HIV- & Presumptive & Not detected & Not done \\
+654 & Jul 11 & 27 & F & HIV- & Presumptive & Not detected & Not done \\
+655 & Jul 11 & 42 & M & HIV- & Presumptive & Not detected & Not done \\
+656 & Jul 11 & 19 & M & Unknown & Presumptive & Not detected & Not done \\
+657 & Jul 11 & 46 & M & HIV- & Presumptive & Not detected & Negative \\
+658 & Jul 12 & 47 & F & HIV- & Presumptive & Not detected & Not done \\
+659 & Jul 12 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+660 & Jul 12 & 42 & M & HIV- & Presumptive & Not detected & Negative \\
+661 & Jul 12 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+662 & Jul 12 & 30 & F & HIV+ & Presumptive & Not detected & Not done \\
+663 & Jul 12 & 26 & F & HIV+ & Presumptive & Not detected & Negative \\
+664 & Jul 12 & 52 & M & HIV+ & Presumptive & Not detected & Not done \\
+665 & Jul 12 & 44 & M & Unknown & Confirmed & Not detected & Positive \\
+666 & Jul 12 & 25 & F & HIV- & Presumptive & Not detected & Not done \\
+667 & Jul 12 & 16 & F & HIV- & Presumptive & Not detected & Not done \\
+668 & Jul 12 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+669 & Jul 12 & 23 & F & HIV- & Presumptive & Not detected & Not done \\
+670 & Jul 13 & 41 & F & HIV- & Presumptive & Not submitted & Not done \\
+671 & Jul 13 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+672 & Jul 13 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+673 & Jul 13 & 33 & M & Unknown & Presumptive & Not detected & Not done \\
+674 & Jul 13 & 23 & M & Unknown & Presumptive & Not detected & Not done \\
+675 & Jul 13 & 36 & M & HIV- & Presumptive & Not detected & Negative \\
+676 & Jul 13 & 55 & M & HIV- & Presumptive & Not detected & Not done \\
+677 & Jul 13 & 49 & F & Unknown & Presumptive & Not detected & Negative \\
+678 & Jul 13 & 35 & F & HIV- & Presumptive & Not detected & Not done \\
+679 & Jul 13 & 46 & M & HIV+ & Presumptive & Not detected & Not done \\
+680 & Jul 13 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+681 & Jul 13 & 38 & M & HIV- & Presumptive & Not detected & Not done \\
+682 & Jul 14 & 56 & M & HIV- & Presumptive & Not detected & Not done \\
+683 & Jul 14 & 64 & M & HIV+ & Presumptive & Not detected & Negative \\
+684 & Jul 14 & 52 & M & HIV- & Presumptive & Not detected & Negative \\
+685 & Jul 14 & 15 & M & HIV- & Presumptive & Not detected & Not done \\
+686 & Jul 14 & 41 & F & HIV- & Presumptive & Not detected & Not done \\
+687 & Jul 14 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+688 & Jul 14 & 88 & M & HIV- & Presumptive & Not detected & Negative \\
+689 & Jul 14 & 20 & M & HIV+ & Presumptive & Not detected & Not done \\
+690 & Jul 14 & 19 & F & Unknown & Presumptive & Not detected & Not done \\
+691 & Jul 14 & 47 & M & HIV+ & Presumptive & Not submitted & Negative \\
+692 & Jul 14 & 36 & M & HIV- & Presumptive & Not detected & Not done \\
+693 & Jul 15 & 39 & M & HIV- & Presumptive & Not detected & Not done \\
+694 & Jul 15 & 54 & M & HIV- & Presumptive & Not submitted & Not done \\
+695 & Jul 15 & 70 & M & HIV- & Presumptive & Not detected & Negative \\
+696 & Jul 15 & 56 & F & HIV- & Presumptive & Not detected & Not done \\
+697 & Jul 15 & 19 & F & Unknown & Presumptive & Not detected & Not done \\
+698 & Jul 15 & 20 & M & Unknown & Presumptive & Not detected & Not done \\
+699 & Jul 15 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+700 & Jul 15 & 19 & F & HIV- & Presumptive & Not detected & Not done \\
+701 & Jul 15 & 61 & F & HIV+ & Presumptive & Not detected & Negative \\
+702 & Jul 15 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+703 & Jul 15 & 21 & F & HIV- & Presumptive & Not detected & Not done \\
+704 & Jul 15 & 30 & M & HIV- & Presumptive & Not detected & Not done \\
+705 & Jul 15 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+706 & Jul 15 & 60 & F & HIV- & Presumptive & Not detected & Negative \\
+707 & Jul 15 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+708 & Jul 15 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+709 & Jul 15 & 21 & F & HIV- & Presumptive & Not detected & Not done \\
+710 & Jul 15 & 37 & M & HIV+ & Presumptive & Not detected & Negative \\
+711 & Jul 15 & 71 & F & HIV- & Presumptive & Not detected & Not done \\
+712 & Jul 15 & 47 & M & HIV+ & Presumptive & Not detected & Not done \\
+713 & Jul 15 & 27 & M & Unknown & Presumptive & Not detected & Negative \\
+714 & Jul 15 & 67 & F & HIV- & Presumptive & Not detected & Negative \\
+715 & Jul 16 & 48 & F & HIV+ & Presumptive & Not detected & Not done \\
+716 & Jul 16 & 53 & F & HIV- & Presumptive & Not detected & Negative \\
+717 & Jul 16 & 44 & M & Unknown & Presumptive & Not detected & Negative \\
+718 & Jul 16 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+719 & Jul 16 & 69 & M & HIV- & Presumptive & Not detected & Not done \\
+720 & Jul 16 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+721 & Jul 16 & 47 & M & HIV- & Presumptive & Not detected & Not done \\
+722 & Jul 16 & 46 & M & HIV+ & Presumptive & Not detected & Not done \\
+723 & Jul 16 & 30 & F & HIV- & Presumptive & Not detected & Not done \\
+724 & Jul 16 & 25 & F & HIV- & Presumptive & Not detected & Not done \\
+725 & Jul 16 & 77 & F & HIV- & Presumptive & Not detected & Not done \\
+726 & Jul 16 & 49 & F & HIV- & Presumptive & Not detected & Not done \\
+727 & Jul 16 & 15 & F & HIV- & Presumptive & Not detected & Not done \\
+728 & Jul 17 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+729 & Jul 17 & 45 & F & HIV- & Presumptive & Not detected & Not done \\
+730 & Jul 17 & 45 & M & HIV- & Presumptive & Not detected & Not done \\
+731 & Jul 17 & 8 & F & HIV- & Presumptive & Not detected & Not done \\
+732 & Jul 17 & 52 & M & HIV- & Presumptive & Not detected & Not done \\
+733 & Jul 17 & 44 & F & HIV+ & Presumptive & Invalid & Negative \\
+734 & Jul 17 & 55 & F & HIV- & Presumptive & Not detected & Negative \\
+735 & Jul 18 & 29 & F & HIV+ & Presumptive & Not detected & Not done \\
+736 & Jul 18 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+737 & Jul 18 & 64 & F & HIV- & Presumptive & Not detected & Not done \\
+738 & Jul 18 & 47 & M & HIV- & Presumptive & Not detected & Not done \\
+739 & Jul 18 & 46 & M & HIV- & Presumptive & Not detected & Not done \\
+740 & Jul 18 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+741 & Jul 18 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+742 & Jul 18 & 34 & M & HIV- & Presumptive & Not detected & Negative \\
+743 & Jul 18 & 57 & F & HIV- & Presumptive & Not detected & Negative \\
+744 & Jul 18 & 40 & F & HIV+ & Presumptive & Not detected & Negative \\
+745 & Jul 18 & 67 & F & HIV- & Presumptive & Not detected & Negative \\
+746 & Jul 18 & 74 & F & HIV- & Presumptive & Not detected & Negative \\
+747 & Jul 18 & 68 & M & Unknown & Presumptive & Not detected & Negative \\
+748 & Jul 18 & 51 & M & Unknown & Presumptive & Not detected & Negative \\
+749 & Jul 18 & 47 & F & HIV+ & Confirmed & Not detected & Positive \\
+750 & Jul 19 & 58 & F & HIV+ & Presumptive & Not detected & Not done \\
+751 & Jul 19 & 48 & F & HIV+ & Presumptive & Not detected & Negative \\
+752 & Jul 19 & 25 & M & HIV- & Confirmed & Detected (High) & Negative \\
+753 & Jul 19 & 63 & M & Unknown & Presumptive & Not detected & Negative \\
+754 & Jul 19 & 25 & F & HIV- & Presumptive & Not detected & Not done \\
+755 & Jul 19 & 34 & F & HIV- & Presumptive & Not detected & Not done \\
+756 & Jul 19 & 39 & M & HIV- & Confirmed & Not detected & Positive \\
+757 & Jul 19 & 39 & M & HIV- & Presumptive & Not detected & Negative \\
+758 & Jul 19 & 84 & F & HIV- & Presumptive & Not detected & Suspicious TB \\
+759 & Jul 19 & 38 & M & HIV+ & Presumptive & Not detected & Negative \\
+760 & Jul 19 & 16 & F & HIV- & Presumptive & Not detected & Not done \\
+761 & Jul 19 & 23 & F & HIV- & Presumptive & Not detected & Not done \\
+762 & Jul 19 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+763 & Jul 19 & 40 & M & HIV- & Confirmed & Detected (High) & Negative \\
+764 & Jul 19 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+765 & Jul 19 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+766 & Jul 19 & 22 & M & HIV- & Presumptive & Not detected & Negative \\
+767 & Jul 19 & 38 & F & HIV+ & Presumptive & Not detected & Negative \\
+768 & Jul 20 & 28 & F & HIV+ & Confirmed & Detected (Low) & Not done \\
+769 & Jul 20 & 49 & F & HIV+ & Presumptive & Not detected & Not done \\
+770 & Jul 20 & 46 & F & HIV- & Presumptive & Not submitted & Not done \\
+771 & Jul 20 & 34 & M & Unknown & Presumptive & Not detected & Not done \\
+772 & Jul 20 & 17 & F & Unknown & Presumptive & Not detected & Not done \\
+773 & Jul 20 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+774 & Jul 20 & 52 & F & HIV+ & Presumptive & Not detected & Negative \\
+775 & Jul 20 & 36 & M & HIV- & Presumptive & Not detected & Negative \\
+776 & Jul 20 & 52 & M & HIV+ & Presumptive & Not detected & Negative \\
+777 & Jul 20 & 45 & M & HIV- & Presumptive & Not detected & Not done \\
+778 & Jul 21 & 30 & F & HIV- & Presumptive & Not detected & Negative \\
+779 & Jul 21 & 22 & F & HIV- & Presumptive & Not detected & Not done \\
+780 & Jul 21 & 50 & F & HIV+ & Presumptive & Not detected & Not done \\
+781 & Jul 21 & 40 & M & HIV- & Presumptive & Not detected & Not done \\
+782 & Jul 21 & 50 & F & HIV+ & Presumptive & Not detected & Not done \\
+783 & Jul 21 & 44 & F & HIV- & Presumptive & Not detected & Not done \\
+784 & Jul 21 & 41 & M & HIV- & Presumptive & Not detected & Not done \\
+785 & Jul 22 & 16 & M & HIV- & Presumptive & Not detected & Negative \\
+786 & Jul 22 & 33 & M & HIV- & Presumptive & Not detected & Not done \\
+787 & Jul 22 & 27 & M & HIV- & Presumptive & Not detected & Negative \\
+788 & Jul 22 & 33 & F & HIV- & Presumptive & Not detected & Negative \\
+789 & Jul 22 & 20 & M & Unknown & Presumptive & Not detected & Negative \\
+790 & Jul 22 & 29 & M & Unknown & Confirmed & Detected (Medium) & Not done \\
+791 & Jul 22 & 42 & M & Unknown & Presumptive & Not detected & Not done \\
+792 & Jul 22 & 23 & F & HIV- & Presumptive & Not detected & Not done \\
+793 & Jul 22 & 27 & M & HIV- & Confirmed & Detected (High) & Negative \\
+794 & Jul 22 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+795 & Jul 22 & 66 & M & HIV- & Presumptive & Not detected & Not done \\
+796 & Jul 22 & 18 & F & HIV- & Presumptive & Not detected & Not done \\
+797 & Jul 22 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+798 & Jul 22 & 39 & M & HIV- & Presumptive & Not detected & Not done \\
+799 & Jul 22 & 50 & M & HIV- & Presumptive & Not detected & Not done \\
+800 & Jul 22 & 20 & M & HIV- & Presumptive & Not detected & Negative \\
+801 & Jul 23 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+802 & Jul 23 & 74 & M & Unknown & Presumptive & Not detected & Not done \\
+803 & Jul 23 & 46 & M & HIV+ & Presumptive & Not detected & Negative \\
+804 & Jul 23 & 31 & M & HIV- & Presumptive & Not detected & Not done \\
+805 & Jul 23 & 48 & M & HIV+ & Confirmed & Detected (High) & Negative \\
+806 & Jul 23 & 75 & F & HIV- & Presumptive & Not detected & Negative \\
+807 & Jul 23 & 39 & M & HIV+ & Presumptive & Not detected & Negative \\
+808 & Jul 23 & 28 & F & HIV+ & Presumptive & Not detected & Negative \\
+809 & Jul 23 & 51 & F & HIV- & Presumptive & Not detected & Not done \\
+810 & Jul 23 & 28 & F & Unknown & Presumptive & Not detected & Negative \\
+811 & Jul 24 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+812 & Jul 24 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+813 & Jul 24 & 55 & M & HIV+ & Presumptive & Not detected & Negative \\
+814 & Jul 24 & 36 & M & HIV- & Presumptive & Not detected & Not done \\
+815 & Jul 24 & 24 & M & HIV- & Presumptive & Not detected & Not done \\
+816 & Jul 24 & 41 & F & HIV+ & Presumptive & Not detected & Not done \\
+817 & Jul 24 & 34 & M & HIV- & Presumptive & Not detected & Not done \\
+818 & Jul 24 & 30 & F & HIV- & Presumptive & Not detected & Not done \\
+819 & Jul 24 & 23 & F & HIV+ & Presumptive & Not detected & Not done \\
+820 & Jul 24 & 42 & M & HIV+ & Presumptive & Not detected & Negative \\
+821 & Jul 24 & 28 & F & HIV- & Presumptive & Not detected & Not done \\
+822 & Jul 24 & 41 & F & HIV- & Presumptive & Not detected & Not done \\
+823 & Jul 24 & 29 & F & HIV- & Presumptive & Not detected & Negative \\
+824 & Jul 25 & 63 & F & HIV- & Presumptive & Not detected & Negative \\
+825 & Jul 25 & 52 & F & HIV- & Presumptive & Not detected & Not done \\
+826 & Jul 25 & 29 & F & HIV- & Presumptive & Not detected & Not done \\
+827 & Jul 25 & 65 & M & HIV+ & Presumptive & Not detected & Not done \\
+828 & Jul 25 & 8 & F & Unknown & Presumptive & Not detected & Not done \\
+829 & Jul 25 & 48 & M & HIV- & Presumptive & Not detected & Negative \\
+830 & Jul 25 & 25 & M & HIV- & Presumptive & Not detected & Negative \\
+831 & Jul 25 & 34 & M & HIV- & Presumptive & Not detected & Negative \\
+832 & Jul 25 & 27 & M & HIV- & Presumptive & Not detected & Negative \\
+833 & Jul 25 & 43 & M & HIV- & Presumptive & Not detected & Not done \\
+834 & Jul 26 & 25 & F & HIV- & Presumptive & Not detected & Not done \\
+835 & Jul 26 & 36 & F & HIV- & Presumptive & Not detected & Not done \\
+836 & Jul 26 & 84 & F & HIV- & Presumptive & Not detected & Not done \\
+837 & Jul 26 & 29 & M & HIV+ & Presumptive & Not detected & Not done \\
+838 & Jul 26 & 27 & M & HIV- & Presumptive & Not detected & Not done \\
+839 & Jul 26 & 47 & M & Unknown & Presumptive & Not detected & Negative \\
+840 & Jul 26 & 50 & F & HIV- & Presumptive & Not detected & Not done \\
+841 & Jul 26 & 37 & M & HIV- & Presumptive & Not detected & Not done \\
+842 & Jul 26 & 19 & F & HIV+ & Presumptive & Not detected & Not done \\
+843 & Jul 26 & 44 & F & HIV+ & Presumptive & Not detected & Not done \\
+844 & Jul 26 & 31 & M & HIV- & Presumptive & Not detected & Not done \\
+845 & Jul 26 & 20 & M & HIV- & Presumptive & Not detected & Not done \\
+846 & Jul 26 & 28 & M & Unknown & Presumptive & Not detected & Not done \\
+847 & Jul 26 & 16 & M & Unknown & Presumptive & Not detected & Not done \\
+848 & Jul 27 & 40 & M & HIV- & Presumptive & Not detected & Not done \\
+849 & Jul 27 & 45 & M & HIV- & Presumptive & Not detected & Not done \\
+850 & Jul 27 & 50 & F & HIV+ & Presumptive & Not detected & Negative \\
+851 & Jul 27 & 20 & M & HIV- & Presumptive & Not detected & Suspicious TB \\
+852 & Jul 27 & 55 & M & Unknown & Presumptive & Not detected & Negative \\
+853 & Jul 27 & 46 & M & HIV+ & Presumptive & Not detected & Not done \\
+854 & Jul 27 & 60 & M & HIV+ & Presumptive & Not detected & Negative \\
+855 & Jul 27 & 17 & F & Unknown & Presumptive & Not detected & Not done \\
+856 & Jul 28 & 30 & M & HIV- & Presumptive & Not detected & Not done \\
+857 & Jul 28 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+858 & Jul 28 & 31 & F & Unknown & Presumptive & Not detected & Negative \\
+859 & Jul 28 & 24 & M & Unknown & Presumptive & Not detected & Negative \\
+860 & Jul 28 & 46 & F & HIV+ & Presumptive & Not detected & Negative \\
+861 & Jul 28 & 38 & M & HIV- & Presumptive & Not detected & Negative \\
+862 & Jul 29 & 31 & F & HIV- & Presumptive & Not detected & Negative \\
+863 & Jul 29 & 20 & F & HIV- & Presumptive & Not detected & Not done \\
+864 & Jul 29 & 75 & F & HIV- & Presumptive & Not detected & Not done \\
+865 & Jul 29 & 74 & F & HIV- & Presumptive & Not detected & Not done \\
+866 & Jul 29 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+867 & Jul 29 & 27 & F & HIV- & Presumptive & Not detected & Not done \\
+868 & Jul 29 & 38 & M & HIV- & Presumptive & Not detected & Negative \\
+869 & Jul 29 & 65 & M & HIV- & Presumptive & Not detected & Negative \\
+870 & Jul 30 & 42 & F & HIV- & Presumptive & Not detected & Not done \\
+871 & Jul 30 & 28 & F & HIV+ & Presumptive & Not detected & Not done \\
+872 & Jul 30 & 30 & F & HIV+ & Presumptive & Not detected & Not done \\
+873 & Jul 30 & 16 & M & Unknown & Presumptive & Not detected & Not done \\
+874 & Jul 30 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+875 & Jul 30 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+876 & Jul 30 & 26 & F & HIV- & Presumptive & Not detected & Not done \\
+877 & Jul 30 & 44 & F & HIV- & Presumptive & Not detected & Not done \\
+878 & Jul 30 & 75 & M & HIV- & Presumptive & Not detected & Negative \\
+879 & Jul 30 & 30 & F & HIV- & Presumptive & Not detected & Not done \\
+880 & Jul 30 & 54 & M & HIV+ & Presumptive & Not detected & Negative \\
+881 & Jul 31 & 26 & F & HIV- & Confirmed & Detected (High) & Not done \\
+882 & Jul 31 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+883 & Jul 31 & 69 & F & HIV- & On treatment & Not detected & Suspicious TB \\
+884 & Jul 31 & 47 & M & HIV+ & On treatment & Detected (low) & Suspicious TB \\
+885 & Jul 31 & 19 & M & Unknown & Presumptive & Not detected & Not done \\
+886 & Jul 31 & 40 & F & HIV- & Presumptive & Invalid & Suspicious TB \\
+887 & Aug 01 & 61 & F & HIV+ & Presumptive & Not detected & Not done \\
+888 & Aug 01 & 28 & F & HIV- & Presumptive & Not detected & Negative \\
+889 & Aug 01 & 56 & M & HIV+ & Presumptive & Not detected & Not done \\
+890 & Aug 01 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+891 & Aug 01 & 18 & M & Unknown & Presumptive & Not detected & Not done \\
+892 & Aug 01 & 31 & F & HIV- & Presumptive & Not detected & Not done \\
+893 & Aug 01 & 56 & M & HIV+ & Presumptive & Not detected & Not done \\
+894 & Aug 01 & 22 & F & HIV- & Presumptive & Not detected & Not done \\
+919 & Aug 04 & 30 & M & HIV- & Confirmed & Not detected & Positive \\
+920 & Aug 04 & 26 & M & HIV- & Presumptive & Not detected & Negative \\
+921 & Aug 04 & 25 & M & HIV- & Presumptive & Not detected & Not done \\
+922 & Aug 04 & 18 & M & Unknown & Presumptive & Not detected & Negative \\
+923 & Aug 04 & 20 & M & HIV+ & Confirmed & Not detected & Positive \\
+924 & Aug 04 & 45 & M & Unknown & Confirmed & Not detected & Positive \\
+925 & Aug 04 & 38 & M & Unknown & Confirmed & Not submitted & Positive \\
+926 & Aug 05 & 36 & M & HIV- & Presumptive & Not detected & Negative \\
+927 & Aug 05 & 40 & M & Unknown & Confirmed & Not detected & Positive \\
+928 & Aug 05 & 66 & F & HIV- & Presumptive & Not detected & Negative \\
+929 & Aug 05 & 51 & M & Unknown & Confirmed & Not detected & Positive \\
+930 & Aug 06 & 30 & F & HIV+ & Presumptive & Not detected & Not done \\
+931 & Aug 06 & 36 & F & HIV+ & Confirmed & Not detected & Positive \\
+932 & Aug 06 & 37 & F & HIV+ & Presumptive & Not detected & Not done \\
+933 & Aug 06 & 33 & M & HIV- & Presumptive & Not detected & Negative \\
+934 & Aug 06 & 34 & M & HIV- & Presumptive & Not detected & Negative \\
+935 & Aug 07 & 44 & M & HIV- & Confirmed & Detected (High) & Not done \\
+936 & Aug 07 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+937 & Aug 07 & 20 & M & HIV- & Presumptive & Not detected & Not done \\
+938 & Aug 07 & 31 & M & HIV- & Confirmed & Detected (Low) & Not done \\
+939 & Aug 07 & 37 & M & HIV+ & Presumptive & Not detected & Not done \\
+940 & Aug 07 & 62 & F & HIV+ & Presumptive & Invalid & Negative \\
+941 & Aug 08 & 30 & M & HIV- & Presumptive & Not detected & Not done \\
+942 & Aug 08 & 38 & M & HIV- & Presumptive & Not detected & Not done \\
+943 & Aug 08 & 25 & M & HIV- & Presumptive & Not detected & Negative \\
+944 & Aug 08 & 37 & M & HIV- & Presumptive & Not detected & Not done \\
+945 & Aug 08 & 37 & M & HIV- & Presumptive & Not detected & Not done \\
+946 & Aug 08 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+947 & Aug 08 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+948 & Aug 08 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+949 & Aug 08 & 32 & M & HIV- & Presumptive & Not detected & Not done \\
+950 & Aug 08 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+951 & Aug 08 & 38 & M & HIV- & Presumptive & Not detected & Not done \\
+952 & Aug 08 & 38 & M & HIV- & Presumptive & Not detected & Not done \\
+953 & Aug 08 & 43 & F & HIV- & Presumptive & Not detected & Not done \\
+954 & Aug 08 & 26 & M & Unknown & Presumptive & Not detected & Not done \\
+955 & Aug 09 & 51 & M & HIV- & Confirmed & Detected (High) & Positive \\
+956 & Aug 09 & 84 & M & Unknown & Presumptive & Not detected & Negative \\
+957 & Aug 09 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+958 & Aug 09 & 38 & F & HIV- & Presumptive & Not detected & Not done \\
+959 & Aug 09 & 46 & M & HIV+ & Presumptive & Not detected & Negative \\
+981 & Aug 13 & 41 & M & HIV- & Presumptive & Not detected & Negative \\
+982 & Aug 13 & 77 & F & HIV- & Presumptive & Not detected & Negative \\
+983 & Aug 13 & 47 & M & HIV+ & Presumptive & Not detected & Negative \\
+984 & Aug 13 & 42 & M & HIV- & Presumptive & Not detected & Negative \\
+985 & Aug 13 & 46 & M & HIV+ & Presumptive & Not detected & Not done \\
+986 & Aug 13 & 29 & F & HIV+ & Presumptive & Not detected & Not done \\
+987 & Aug 14 & 46 & M & HIV- & Presumptive & Not detected & Not done \\
+988 & Aug 14 & 54 & F & HIV+ & Presumptive & Not detected & Negative \\
+989 & Aug 14 & 35 & M & HIV- & Presumptive & Not detected & Not done \\
+990 & Aug 14 & 51 & F & NA & Presumptive & Not detected & Not done \\
+991 & Aug 14 & 24 & F & HIV- & Presumptive & Not detected & Not done \\
+992 & Aug 14 & 16 & F & Unknown & Presumptive & Not detected & Not done \\
+993 & Aug 14 & 46 & M & HIV- & Presumptive & Not detected & Suspicious TB \\
+994 & Aug 14 & 31 & F & HIV- & Presumptive & Not detected & Not done \\
+995 & Aug 14 & 55 & M & HIV- & Presumptive & Not detected & Not done \\
+996 & Aug 15 & 51 & M & HIV- & Presumptive & Not detected & Not done \\
+997 & Aug 15 & 21 & M & HIV+ & Confirmed & Detected (High) & Negative \\
+998 & Aug 15 & 22 & M & HIV- & Confirmed & Detected (High) & Negative \\
+999 & Aug 15 & 41 & M & Unknown & Presumptive & Not detected & Negative \\
+1000 & Aug 15 & 32 & M & HIV- & Presumptive & Not detected & Suspicious TB \\
+1001 & Aug 15 & 34 & M & Unknown & Presumptive & Not detected & Suspicious TB \\
+1002 & Aug 15 & 34 & M & HIV- & Presumptive & Not detected & Suspicious TB \\
+1003 & Aug 15 & 39 & F & HIV- & Confirmed & Not detected & Positive \\
+1004 & Aug 16 & 50 & M & HIV- & Presumptive & Not submitted & Suspicious TB \\
+1005 & Aug 16 & 50 & M & HIV+ & Presumptive & Not detected & Not done \\
+1006 & Aug 16 & 70 & M & HIV- & Presumptive & Not detected & Negative \\
+1007 & Aug 16 & 35 & F & HIV- & Presumptive & Not detected & Not done \\
+1008 & Aug 16 & 26 & M & HIV- & Presumptive & Not detected & Not done \\
+1009 & Aug 16 & 28 & M & HIV- & Presumptive & Not detected & Not done \\
+1010 & Aug 16 & 29 & M & HIV- & Presumptive & Not detected & Not done \\
+1011 & Aug 16 & 42 & F & HIV- & Presumptive & Not detected & Not done \\
+1041 & Aug 21 & 39 & M & HIV- & Presumptive & Not detected & Negative \\
+1042 & Aug 21 & 26 & M & HIV- & Presumptive & Not detected & Negative \\
+1043 & Aug 21 & 4 & M & HIV- & Presumptive & Not detected & Not done \\
+1044 & Aug 21 & 26 & M & HIV- & Confirmed & Detected (High) & Not done \\
+1045 & Aug 21 & 57 & M & HIV- & Presumptive & Not detected & Not done \\
+1046 & Aug 21 & 44 & M & HIV- & Presumptive & Not detected & Negative \\
+1047 & Aug 21 & 48 & M & HIV- & Confirmed & Detected (Medium) & Negative \\
+1048 & Aug 22 & 49 & M & HIV- & Presumptive & Not detected & Not done \\
+1049 & Aug 22 & 20 & M & HIV- & Confirmed & Not detected & Positive \\
+1050 & Aug 22 & 46 & M & HIV+ & Presumptive & Not detected & Not done \\
+1051 & Aug 22 & 38 & M & HIV- & Presumptive & Not detected & Negative \\
+1052 & Aug 22 & 18 & F & HIV+ & Presumptive & Not detected & Not done \\
+1053 & Aug 22 & 29 & M & HIV- & Presumptive & Not detected & Negative \\
+1054 & Aug 22 & 56 & F & HIV- & Presumptive & Not detected & Negative \\
+\end{longtable}
+}
+
+\clearpage
+
+\captionof{table}{Study days when \emph{Mtb} was detected in the air of the clinic waiting hall. Bioaerosol samples were filtered and analysed with GeneXpert Ultra MTB/RIF assays. Shown are the test results with the cycle threshold (Ct) value. Note that the first positive sample was collected before modelling.}
+\label{tab:S3}
+
+{\small
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4716}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1950}}@{}}
+\toprule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\textbf{Date} & \textbf{Gene Xpert Ultra test result} & \textbf{Ct value} \\
+13 June & \begin{minipage}[t]{\linewidth}\raggedright
+MTB Trace DETECTED;\\
+RIF Resistance INDETERMINATE\strut
+\end{minipage} & 32.5 \\
+30 June & \begin{minipage}[t]{\linewidth}\raggedright
+MTB DETECTED VERY LOW;\\
+RIF Resistance NOT DETECTED\strut
+\end{minipage} & 28.2 \\
+3 July & \begin{minipage}[t]{\linewidth}\raggedright
+MTB Trace DETECTED;\\
+RIF Resistance INDETERMINATE\strut
+\end{minipage} & 33 \\
+4 July & \begin{minipage}[t]{\linewidth}\raggedright
+MTB Trace DETECTED;\\
+RIF Resistance INDETERMINATE\strut
+\end{minipage} & 27.1 \\
+15 July & \begin{minipage}[t]{\linewidth}\raggedright
+MTB Trace DETECTED;\\
+RIF Resistance INDETERMINATE\strut
+\end{minipage} & 26.3 \\
+16 July & \begin{minipage}[t]{\linewidth}\raggedright
+MTB Trace DETECTED;\\
+RIF Resistance INDETERMINATE\strut
+\end{minipage} & 28.9 \\
+\end{longtable}
+}
+
+\clearpage
+
+\subsection{Supplementary result figures}\label{supplementary-result-figures}
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=5.05556in]{../../../../results/tracking_duration_distribution.png}
+\caption{Distribution of the duration of person movements. Number and proportion (\%) of durations \textless1min, 1-5min, 5-15min, 15-30min, and \textgreater30min.}
+\label{fig:S3}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=6.88889in]{../../../../results/environmental_ventilation_model_comparison.png}
+\caption{Air exchange rates by model. Boxplots of the daily air exchange rates based on a transient mass balance vs. a steady state model. Medians as lines, interquartile ranges as coloured boxes, 1.5 x IQR as whiskers, individual study days as dots. The p-value refers to a two-sided t.test.}
+\label{fig:S4}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=8.125in]{../../../../results/tracking_density_over_time.png}
+\caption{Spatial density in the hospital's waiting area by daytime. Number of people in the waiting area (top), Gini coefficient (middle) by daytime. Median as lines, interquartile range as ribbons. Timepoints with \(\leq\)10 people were removed before computing the Gini coefficients. Lower Gini coefficients indicate less clustering of people.}
+\label{fig:S5}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\includegraphics[width=5.49077in,height=7.16277in]{../../../../results/tracking_spatial_density.png}
+\caption{Spatial density in the waiting area of the hospital. Proportion of tracks in squared cells of length 0.5m, with darker colours showing higher density. Clustering was measured by the Gini coefficient with the median and interquartile range (IQR) of the daily time-aggregated median coefficient. Lower Gini coefficients indicate a more even spread of people. Also shown is the estimated reduction in the Gini coefficient (median and 95\%-credible interval, CrI) after adjusting for weekday effects. For illustration, three example person movements are shown as blue lines. Baseline: routine clinic conditions; first intervention: optimised waiting area layout and guided physical distancing; second intervention: optimised waiting area layout, guided physical distancing and patient flow system.}
+\label{fig:S6}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=4.43056in]{../../../../results/modelling_risk_by_infectiousness_assumptions.png}
+\caption{Sensitivity analysis for \emph{Mtb} transmission risk under varying assumptions about infectiousness of different patient subgroups. Boxplot of the modelled expected number of \emph{Mtb} infections in the main analysis, which assumed people with presumptive and confirmed TB were equally infectious, compared with two scenarios: (1) people with confirmed TB were eight times more infectious than those with presumptive TB, and (2) people with HIV co-infection were six times more infectious than people with only presumptive or confirmed TB. Medians as lines, interquartile ranges as coloured boxes, 1.5 x IQR as whiskers, individual study days as dots.}
+\label{fig:S7}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=4.43056in]{../../../../results/modelling_hourly_risk_by_group.png}
+\caption{\emph{Mtb} infection rate by person attributes. The modelled number of \emph{Mtb} per 1,000 person-hours across all person movements (overall), those associated with different genders (females and males), and those associated with healthcare worker status (healthcare workers and non-healthcare workers). Medians as lines, interquartile ranges as coloured boxes, 1.5 x IQR as whiskers, individual study days as dots.}
+\label{fig:S8}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=3.69444in]{../../../../results/modelling_risk_per_day.png}
+\caption{Number of \emph{Mtb} infections over the study. The modelled expected number of \emph{Mtb} infections by day and coloured by study phase. Medians as dots and 50\%, 80\%, and 95\% quantiles as ribbons coloured by study phases. Baseline: routine clinic conditions; first intervention: optimised waiting area layout and guided physical distancing; second intervention: optimised waiting area layout, guided physical distancing and patient flow system.}
+\label{fig:S9}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=4.05556in]{../../../../results/modelling_adjusted_rate_ratio_per_day.png}
+\caption{Adjusted rate ratio over the study. Modelled ratio of the daily number of expected \emph{Mtb} infections according to the non-uniform mixed (NUM) and the uniform-mixed (UM) model, normalised by total person-time\textbf{.} The NUM model considers proximity between individuals, whereas the UM model does not, so that lower rate ratios mean that close-proximity contacts contributed less to \emph{Mtb} transmission risk. The rate ratio was normalised by total person-time to account for higher ratios due to naturally more occurring close-proximity contacts if the clinic was more crowded. Medians as dots and 50\%, 80\%, and 95\% quantiles as ribbons coloured by study phases. Baseline: routine clinic conditions; first intervention: infrastructure modification to increase spatial separation in the waiting area; second intervention: behavioural intervention to promote physical distancing among hospital attendees.}
+\label{fig:S10}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[H]
+\includegraphics[width=5.90551in,height=2.58333in]{../../../../results/modelling_risk_overall.png}
+\caption{Total number of \emph{Mtb} infections by model configuration. Estimated expected total number of \emph{Mtb} infections in the clinic according to the non-uniform mixed model (which considers proximity to the infectious individual) and the uniform mixed model (which assumes a well-mixed airspace). The difference between both models represents the contribution of proximity to transmission risk. Medians as dots and 50\%, 80\%, and 95\% quantiles as ribbons coloured by model.}
+\label{fig:S11}
+\end{figure}
+
+\bibliographystyle{plos2015}
+\bibliography{../references}
+
+\end{document}
