@@ -1020,10 +1020,31 @@ RIF Resistance INDETERMINATE\strut
 \clearpage
 
 % Added in revision (R3.3): sensitivity analysis for spatial clustering
-% \added wrapper removed due to changes package incompatibility with \captionof
-\captionof{table}{\textbf{Sensitivity analysis for spatial clustering measures.} Median (interquartile range) by study phase and estimated changes (95\%-credible interval) during the first and second intervention, using two kernel methods (Gaussian, exponential) and two measures (Gini coefficient, Shannon entropy).}\label{tab:S3}
-
-\textcolor{red}{\textbf{[TABLE S4 PLACEHOLDER --- results to be added]}}
+\begin{table}[ht]
+\centering
+\caption{\textbf{Sensitivity analysis for spatial clustering measures.} Median (interquartile range) by study phase and estimated median changes (95\%-credible interval, in \%) during the first and second intervention, using two kernel methods (Gaussian, exponential) and two measures (Gini coefficient, Shannon entropy). A decrease in the Gini coefficient and an increase in Shannon entropy indicate that the spatial distribution of clinic attendees was more uniform, i.e. the attendees were less spatially clustered in the clinic.}
+\label{tab:S3}
+\small
+\begin{tabular}{l ccc}
+\toprule
+ & Baseline & First intervention & Second intervention \\
+\midrule
+\multicolumn{4}{l}{\textit{Panel A: Values by study phase, median (IQR)}} \\
+[0.5ex]
+Gaussian kernel + Gini & 0.55 (0.51, 0.58) & 0.51 (0.45, 0.55) & 0.51 (0.48, 0.62) \\
+Exponential kernel + Gini & 0.48 (0.44, 0.51) & 0.47 (0.40, 0.51) & 0.46 (0.42, 0.56) \\
+Gaussian kernel + Entropy & 6.78 (6.71, 6.87) & 6.86 (6.75, 6.96) & 6.86 (6.60, 6.92) \\
+Exponential kernel + Entropy & 6.91 (6.86, 6.99) & 6.94 (6.83, 7.04) & 6.95 (6.73, 7.02) \\
+[1ex]
+\multicolumn{4}{l}{\textit{Panel B: Estimated intervention effects, median (95\% CrI, in \%)}} \\
+[0.5ex]
+Gaussian kernel + Gini &  & -23.67 (-32.06, -13.38) & -13.35 (-23.01, -1.06) \\
+Exponential kernel + Gini &  & -18.34 (-28.55, -6.83) & -12.13 (-23.69, -0.85) \\
+Gaussian kernel + Entropy &  & 2.04 (1.05, 2.97) & 0.92 (0.01, 1.83) \\
+Exponential kernel + Entropy &  & 1.34 (0.49, 2.21) & 0.71 (-0.09, 1.51) \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \clearpage
 
@@ -1064,7 +1085,7 @@ RIF Resistance INDETERMINATE\strut
 
 \begin{figure}[H]
 \includegraphics[width=5.90551in,height=4.43056in]{../../../../results/modelling_risk_by_infectiousness_assumptions.png}
-\caption{\textbf{Sensitivity analysis for \emph{Mtb} transmission risk under varying assumptions about infectiousness of different patient subgroups.} Boxplot of the modelled expected number of \emph{Mtb} infections in the main analysis, which assumed people with presumptive and confirmed TB were equally infectious, compared with two scenarios: (1) people with confirmed TB were eight times more infectious than those with presumptive TB, and (2) people with HIV co-infection were six times more infectious than people with only presumptive or confirmed TB. Medians as lines, interquartile ranges as coloured boxes, 1.5 x IQR as whiskers, individual study days as dots.}
+\caption{\textbf{Sensitivity analysis for \emph{Mtb} transmission risk under varying assumptions about infectiousness of different patient subgroups.} Boxplot of the modelled expected number of \emph{Mtb} infections in the main analysis, which assumed \added{that a random subset of people with presumptive TB were infectious and that} people with presumptive and confirmed TB were equally infectious, compared with two scenarios: (1) people with confirmed TB were eight times more infectious than those with presumptive TB, (2) people with HIV co-infection were six times more infectious than people with only presumptive or confirmed TB, and (3) all confirmed and presumptive TB patients were considered infectious---reflecting the observed TB prevalence of 0.40\% among attendees, close to the community-based estimates from Zambia \cite{klinkenberg2023PLoSMed}. Medians as lines, interquartile ranges as coloured boxes, 1.5 x IQR as whiskers, individual study days as dots.}
 \label{fig:S7}
 \end{figure}
 
