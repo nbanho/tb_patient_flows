@@ -9,6 +9,8 @@
 \externaldocument{manuscript}
 \externaldocument{appendix}
 \usepackage{soul}
+\usepackage{graphicx}
+\usepackage{float}
 
 \newcommand{\comment}[1]{\textbf{Comment:} \textit{#1}}
 \newcommand{\response}[1]{\textbf{Response:} #1}
@@ -25,7 +27,23 @@
 
 \noindent Dear Dr.\ Farrell,\\[0.5em]
 
-\noindent Thank you for the opportunity to revise our manuscript. Below, we provide point-by-point responses to all editorial and reviewer comments. Changes in the manuscript are indicated by page and line numbers.\\[1em]
+\noindent Thank you for the opportunity to revise our manuscript. We are grateful for the constructive feedback from all three reviewers, which has substantially improved the paper. Below, we provide point-by-point responses to all editorial and reviewer comments. Changes in the manuscript are indicated by page and line numbers, and copies of all revised and newly added figures are appended at the end of this letter.\\[0.5em]
+
+\noindent The most important changes in the revised manuscript are:
+
+\begin{enumerate}
+\item \textbf{Clearer distinction between empirical and modelled findings.} Throughout the manuscript, we now consistently qualify transmission risk estimates as modelled outputs and use attenuated language (``potentially prevented,'' ``may have a meaningful public health impact'') rather than definitive claims (\ref{r:2.1}, \ref{r:2.7}).
+
+\item \textbf{Expanded description of the study setting and interventions.} The Methods section has been restructured into separate ``Study setting'' and ``Study interventions'' subsections, with the intervention details (former Supplementary Table S1) moved into the main text as Table 1. A new Figure~\ref{fig:interventions} illustrates the intended impact of the interventions during each study phase (\ref{r:2.12}, \ref{r:2.13}, \ref{r:2.18}).
+
+\item \textbf{Additional sensitivity analyses.} We added three new sensitivity analyses in response to reviewer concerns: (i) an alternative kernel (exponential) and metric (Shannon entropy) for measuring spatial clustering (\ref{r:3.3}, \ref{r:2.5}); (ii) a revised HIV sensitivity scenario assuming 33\% lower infectiousness, replacing the implausible six-fold increase (\ref{r:2.31}, \ref{r:3.4}); and (iii) a scenario in which all confirmed and presumptive TB patients are considered infectious (\ref{r:2.8}).
+
+\item \textbf{Discussion of modelling limitations.} A new paragraph discusses the limitations of the well-mixed assumption, the pros and cons of computational fluid dynamics vs.\ Wells-Riley-based approaches, and the need for empirical airflow data (\ref{r:2.27}, \ref{r:2.3}).
+
+\item \textbf{Reporting improvements.} Absolute ventilation rates (L/s) are now reported alongside air exchange rates (\ref{r:2.14}). Prevented infections are reported as daily rates and per-entry rates (\ref{r:2.9}, \ref{r:2.15}). The colour scheme in figures showing intervention effects and weekday-specific data has been updated (\ref{r:2.19}, \ref{r:2.36}).
+\end{enumerate}
+
+\clearpage
 
 % ============================================================
 \section*{Editorial Comments}
@@ -198,7 +216,7 @@ We also note a practical advantage of using clinical data to identify TB patient
 
 Regarding TB prevalence: the reviewer notes that the estimated TB prevalence among clinic attendees (713/178,510 = 0.4\%) is lower than community-based estimates. We note that the denominator (178,510 entries) overestimates the number of unique clinic attendees, as it includes re-entries and very short entries by non-attending visitors. The TREATS study reported a TB prevalence of 0.51\% for Zambian communities \citep{klinkenberg2023PLoSMed}. When considering both confirmed and presumptive TB patients together, our estimate of 0.4\% is thus reasonably close to this community estimate.
 
-To address the reviewer's concern directly, we have added a sensitivity analysis in which all confirmed and presumptive TB patients are considered infectious---rather than only a random subset of presumptive cases as in the main analysis (p.\,\pageref{chg:R2.8}). This scenario effectively assumes a higher TB prevalence consistent with community-based estimates, while retaining the advantage of using clinically identified patients with well-reconstructed movement trajectories. \textcolor{red}{As expected, this scenario yields a higher absolute modelled transmission risk, but the relative intervention effects remain consistent. The results are reported alongside the other sensitivity analyses in the Results section (p.\,\pageref{chg:R2.8results}) and Supplementary Figure \ref{fig:S7}.}}
+To address the reviewer's concern directly, we have added a sensitivity analysis in which all confirmed and presumptive TB patients are considered infectious---rather than only a random subset of presumptive cases as in the main analysis (p.\,\pageref{chg:R2.8}). This scenario effectively assumes a higher TB prevalence consistent with community-based estimates, while retaining the advantage of using clinically identified patients with well-reconstructed movement trajectories. As expected, this scenario yields a substantially higher absolute modelled transmission risk: the expected number of infections was 172\% (95\% quantile 54--320) higher than in the main analysis. The relative intervention effects, however, remain consistent, as both the proximity-based and well-mixed models are equally affected by the increased number of infectious individuals. The results are reported alongside the other sensitivity analyses in the Results section (p.\,\pageref{chg:R2.8results}) and Supplementary Figure \ref{fig:S7}.}
 
 \item\label{r:2.9} \comment{In presenting the modelled impact on Mtb transmission (abstract and results), it is unclear why the authors sum over both interventions, given they have data that might allow them to look separately at each intervention. Also, surely we want rates, or differences per day or per visit, rather than counts.}
 
@@ -348,7 +366,7 @@ We note that emerging rapid assessment methods that combine behavioural data wit
 
 \item\label{r:2.31} \comment{The scenario where HIV positive people were six times more infectious is not plausible. Yes, in Rod Escombe's animal chamber work, they estimated a quanta generation rate of $\sim$8q/h. However, these were also people with advanced DRTB, which may explain the discrepancy between these findings and those from e.g.\ the Johns Hopkins Pilot Ward. There is a lot of other evidence to suggest that people with HIV associated immunocompromise are less infectious than people not living with HIV (PMID 24368620).}
 
-\response{We thank the reviewer for this correction. We have reviewed the literature and agree that the original assumption of HIV-positive patients being six times more infectious was not supported by the broader evidence. As the reviewer notes, the high quanta generation rates estimated in \citeauthor{escombe2007ClinInfectDis}'s animal chamber work likely reflected advanced drug-resistant TB rather than HIV status per se. We have revised this sensitivity analysis: based on \citet{martinez2021ClinInfectDis}, we now assume that HIV-positive TB patients generate quanta at a 33\% lower rate than HIV-negative patients, reflecting evidence that HIV-associated immunocompromise reduces infectiousness. We have updated the Methods (p.\,\pageref{chg:R2.31}) and re-run the sensitivity analysis accordingly. \textcolor{red}{Under this revised assumption, the overall modelled transmission risk is lower, consistent with the reviewer's expectation.}}
+\response{We thank the reviewer for this correction. We have reviewed the literature and agree that the original assumption of HIV-positive patients being six times more infectious was not supported by the broader evidence. As the reviewer notes, the high quanta generation rates estimated in \citeauthor{escombe2007ClinInfectDis}'s animal chamber work likely reflected advanced drug-resistant TB rather than HIV status per se. We have revised this sensitivity analysis: based on \citet{martinez2021ClinInfectDis}, we now assume that HIV-positive TB patients generate quanta at a 33\% lower rate than HIV-negative patients, reflecting evidence that HIV-associated immunocompromise reduces infectiousness. We have updated the Methods (p.\,\pageref{chg:R2.31}) and re-run the sensitivity analysis accordingly. Under this revised assumption, the expected number of \emph{Mtb} infections was 3\% (95\% quantile --20--0) lower than in the main analysis, consistent with the reviewer's expectation that HIV-associated immunocompromise reduces infectiousness. The intervention effects remain unchanged, as the reduced quanta generation affects both the proximity-based and well-mixed models equally.}
 
 \item\label{r:2.32} \comment{Do the authors expect the intervention to impact waiting time? If so, normalising by person time could remove some of the intervention effect. I expect not, but would be good to include data or a comment.}
 
@@ -403,11 +421,11 @@ For the kernel, we replaced the Gaussian kernel with an exponential kernel ($\ex
 
 For the measure, we computed Shannon entropy as an alternative to the Gini coefficient. While the Gini quantifies inequality in the spatial distribution (higher values = more clustering), entropy quantifies evenness (higher values = more uniform distribution). Both capture spatial clustering from complementary perspectives.
 
-\textcolor{red}{Results were qualitatively similar across all combinations of kernel and measure: the interventions reduced spatial clustering during both intervention phases, with larger reductions during the first intervention (Supplementary Table \ref{tab:S3}, p.\,\pageref{chg:R3.3results}).}}
+Results were qualitatively similar across all combinations of kernel and measure: the interventions reduced spatial clustering during both intervention phases, with larger reductions during the first intervention (Supplementary Table \ref{tab:S3}, p.\,\pageref{chg:R3.3results}).}
 
 \item\label{r:3.4} \comment{How does the potential for HIV positivity affect the results?}
 
-\response{HIV positivity is considered in our model only through a sensitivity analysis examining its impact on the quanta generation rate. In the original submission, we assumed that HIV-positive TB patients generated quanta at six times the rate of HIV-negative patients, following \citet{escombe2007ClinInfectDis}. In response to Reviewer \#2 (see \ref{r:2.31}), we have revised this scenario: the evidence now suggests that people with HIV-associated immunocompromise are likely \textit{less} infectious, so we have reversed the direction of this sensitivity analysis accordingly. \textcolor{red}{Under the revised assumption, overall modelled transmission risk would be lower, not higher.}
+\response{HIV positivity is considered in our model only through a sensitivity analysis examining its impact on the quanta generation rate. In the original submission, we assumed that HIV-positive TB patients generated quanta at six times the rate of HIV-negative patients, following \citet{escombe2007ClinInfectDis}. In response to Reviewer \#2 (see \ref{r:2.31}), we have revised this scenario: the evidence now suggests that people with HIV-associated immunocompromise are likely \textit{less} infectious, so we have reversed the direction of this sensitivity analysis accordingly. Under the revised assumption, the expected number of \emph{Mtb} infections was 3\% (95\% quantile --20--0) lower than in the main analysis, consistent with reduced infectiousness among HIV-positive TB patients.
 
 We did not model the effect of HIV on susceptibility. Attendees living with HIV but without TB co-infection may have increased susceptibility to \emph{Mtb} infection given the same dose, which could affect the absolute number of modelled infections. We have added a brief note on this in the limitations (p.\,\pageref{chg:R3.4}). However, since the intervention effects are estimated in relative terms (as the ratio between the proximity-based and well-mixed models), differential susceptibility among attendees does not affect the estimated intervention effects.}
 
@@ -418,6 +436,36 @@ We did not model the effect of HIV on susceptibility. Attendees living with HIV 
 \end{enumerate}
 
 \clearpage
+
+\section*{Revised and New Figures}
+
+For the convenience of the reviewers, we include below copies of all figures that were revised or newly added.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{../../../revised_study-setting.png}
+\caption*{\textbf{Figure \ref{fig:1} (revised).} Study setting, now with positions of benches and windows indicated.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{../../../revised_study_phase_baseline.png}\\[1em]
+\includegraphics[width=0.9\textwidth]{../../../revised_study_phase_first-intervention.png}\\[1em]
+\includegraphics[width=0.9\textwidth]{../../../revised_study_phase_second-intervention.png}
+\caption*{\textbf{Figure \ref{fig:interventions} (new).} Illustration of the intended impact of study interventions. (A) Baseline: routine clinic conditions with patients clustering near registration and consultation rooms. (B) First intervention: redesigned seating layout for more uniform spread. (C) Second intervention: added one-way patient flow system.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{../../../../results/modelled_data.png}
+\caption*{\textbf{Figure \ref{fig:3} (revised).} Clinical, environmental and person-tracking data, with updated colour scheme in panel B.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{../../../../results/modelled_effects.png}
+\caption*{\textbf{Figure \ref{fig:4} (revised).} Effects of proximity-targeting interventions on spatial clustering and \emph{Mtb} transmission, with updated colour scheme.}
+\end{figure}
 
 \bibliographystyle{apalike}
 \bibliography{../references}
