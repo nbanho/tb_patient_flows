@@ -95,7 +95,7 @@ tb_patient_flows/
 
 ### Tracking data (download from OSF)
 
-The processed person-tracking data for all 52 study days is available on OSF:
+The processed person-tracking data for all 52 study days will be deposited on OSF upon publication of the paper:
 
 > **[https://doi.org/10.17605/OSF.IO/P3W24](https://doi.org/10.17605/OSF.IO/P3W24)**
 
@@ -246,6 +246,22 @@ For the spatiotemporal Wells-Riley model methodology, please also cite:
 
 > Banholzer N, Middelkoop K, Leukes J, Weingartner E, Schmutz R, Zürcher K, Egger M, Wood R, Fenner L. "Estimating *Mycobacterium tuberculosis* transmission in a South African clinic: Spatiotemporal model based on person movements." *PLOS Computational Biology* (2025). DOI: [10.1371/journal.pcbi.1012823](https://doi.org/10.1371/journal.pcbi.1012823)
 
+## Data use agreement
+
+The anonymized data in this repository and on OSF were collected at the Centre for Infectious Disease Research in Zambia (CIDRZ) with approval from the National Health Research Authority (NHRA) of Zambia and the University of Zambia Biomedical Research Ethics Committee (UNZABREC). Public release of these data was approved by the NHRA (Ref: NHRA/DP/03/2026).
+
+By using these data, you agree to the following terms:
+
+- **No re-identification.** You shall not attempt to re-identify any individual in the dataset.
+- **Acknowledgment.** You must acknowledge CIDRZ and the NHRA as the source and approving authority for the data in any publication or presentation.
+- **Non-commercial use.** The data may only be used for non-commercial, scientific research purposes.
+- **Publication disclaimer.** Any publications arising from these data must include the following disclaimer: *"The data used in this study were collected with approval from the National Health Research Authority (NHRA) of Zambia and the University of Zambia Biomedical Research Ethics Committee (UNZABREC). The interpretation and conclusions are solely those of the authors."*
+
 ## License
 
-This project is licensed under the MIT License.
+- **Code** (all files in `preprocessing/`, `modelling/`, and `analysis/`): [MIT License](https://opensource.org/licenses/MIT).
+- **Data** (all files in `data-clean/` and on OSF): [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (Attribution-NonCommercial), subject to the data use agreement above.
+
+## Acknowledgments
+
+We thank the National Health Research Authority (NHRA) of Zambia and the University of Zambia Biomedical Research Ethics Committee (UNZABREC) for ethical approval, and the Centre for Infectious Disease Research in Zambia (CIDRZ) for facilitating data collection.
