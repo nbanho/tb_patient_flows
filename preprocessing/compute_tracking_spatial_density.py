@@ -1,3 +1,13 @@
+"""Compute per-second spatial density metrics using Gaussian kernel density estimation.
+
+For each study date, computes occupancy count (N), Gini coefficient, and Shannon
+entropy on the building grid. The Gini coefficient measures spatial clustering
+(0 = uniform, approaching 1 = concentrated). 'gini_kde' in the output refers to
+the Gini coefficient computed via kernel density estimation.
+
+Reads linked tracking data. Writes to data-clean/tracking/occupancy/{date}.csv.
+"""
+
 import os, argparse
 import numpy as np
 import pandas as pd
@@ -11,8 +21,8 @@ base_path = 'data-clean/tracking/'
 save_path = os.path.join(base_path, 'occupancy/')
 linked_tb_path = 'data-clean/tracking/linked-tb/'
 
-START_SEC = 6 * 3600
-TOTAL_SECONDS = 12 * 3600 + 1
+START_SEC = 6 * 3600          # 6 AM in seconds since midnight
+TOTAL_SECONDS = 12 * 3600 + 1  # 12 hours (6 AM to 6 PM inclusive)
 
 EVAL_COORDS = None      # unused in fast path but we keep it for compatibility
 CELL_AREA   = None
@@ -23,12 +33,14 @@ SIGMA_PIX   = None
 
 # create fixed spatial domain
 def create_spatial_domain(cell_size=0.5):
+    """Create the spatial grid and binary mask for the waiting area polygons."""
     image_extent = (0, 51, -0.02, 14.214)
     x1, x2, y1, y2 = image_extent
     x_grid = np.arange(x1, x2, cell_size)
     y_grid = np.arange(y1, y2, cell_size)
     xx, yy = np.meshgrid(x_grid, y_grid)
 
+    # Polygon vertices (meters) for the three waiting area sections
     waiting_area_1 = [[8, 0.5], [47.5, 0.5], [47.5, 6.3], [8, 6.3]]
     waiting_area_2 = [[0, 6.3], [51, 6.3], [51, 8.9], [0, 8.9]]
     waiting_area_3 = [[0, 8.9], [8, 8.9], [8, 12.8], [0, 12.8]]
@@ -42,6 +54,7 @@ def create_spatial_domain(cell_size=0.5):
     return mask, xx, yy, cell_size
 
 def _to_grid_idx(x, y, grid_meta):
+    """Convert real-world (x, y) coordinates to grid (row, col) indices."""
     y0, x0, cell_sz, H, W = grid_meta
     j = np.floor((x - x0) / cell_sz + 0.5).astype(np.int32)  # round to nearest
     i = np.floor((y - y0) / cell_sz + 0.5).astype(np.int32)
@@ -53,6 +66,7 @@ def _to_grid_idx(x, y, grid_meta):
 
 # helpers
 def gini(p):
+    """Compute the Gini coefficient of a distribution (0 = uniform, 1 = concentrated)."""
     p = np.asarray(p, dtype=np.float64)
     s = p.sum()
     if s <= 0:
@@ -64,6 +78,7 @@ def gini(p):
 
 
 def entropy(p):
+    """Compute Shannon entropy of a distribution (in nats)."""
     p = np.asarray(p, dtype=np.float64)
     s = p.sum()
     if s <= 0:
@@ -83,6 +98,7 @@ def spatial_kde(x, y):
     return gini(p), entropy(p)
 
 def process_date(date):
+    """Process one study date: compute per-second occupancy, Gini, and entropy."""
     # load and pad data
     df = read_linked_tracking_data(date)
     df = pad_track_data(df)
@@ -188,6 +204,7 @@ def process_date(date):
     return path
 
 def _init_worker(eval_coords_, cell_area_, bandwidth_, mask_=None, grid_meta_=None, cell_size_=None):
+    """Initialize module-level globals for multiprocessing worker processes."""
     # keep backward compatibility with your current initargs; we also allow passing mask/grid_meta
     global EVAL_COORDS, CELL_AREA, BANDWIDTH, MASK, GRID_META, SIGMA_PIX
     EVAL_COORDS = eval_coords_

@@ -1,3 +1,36 @@
+"""Wells-Riley spatiotemporal TB transmission risk simulation.
+
+Main entry point for running Monte Carlo simulations of airborne
+Mycobacterium tuberculosis (Mtb) transmission in the hospital waiting area.
+For each simulation draw and study date, the script:
+  1. Solves a 2D diffusion-removal PDE for quanta concentrations emitted by
+     infectious TB patients at their tracked positions.
+  2. Computes inhaled quanta doses for all non-TB individuals at their
+     tracked positions under both the spatiotemporal (diffusive) and
+     well-mixed exposure models.
+  3. Saves per-person, per-hour exposure results to CSV.
+
+Usage:
+    python run_model.py --name <run_name> --date <YYYY-MM-DD|all> --sim "(1,100)"
+
+Reads from:
+    data-clean/tracking/{tb,non-tb}-positions/   (preprocessed positions)
+    data-clean/building/                          (grid mask, volume, geometry)
+    data-clean/environmental/                     (air exchange rates)
+    data-clean/assumptions/                       (quanta generation & removal rates)
+Writes to:
+    modelling-results/<run_name>/<date>/risk_results_sim_<N>.csv
+
+Abbreviations used in this module:
+    AER   = Air Exchange Rate (1/h)
+    TMB   = Transient Mass Balance (CO2-based AER estimation method)
+    qgen  = quanta generation
+    qrem  = quanta removal
+    inact = pathogen inactivation
+    settl = gravitational settling
+    br    = breathing rate
+"""
+
 import os
 import re
 import ast
@@ -245,7 +278,10 @@ def prepare_date_inputs(
         a + i + s for a, i, s in zip(aer_list, inact_list, settl_list)
     ]
 
-    # Breathing rates (m3/s)
+    # Breathing rates (m3/s).
+    # Default values are sex-averaged (50% male, 50% female) from EPA (2011):
+    #   Waiting (sedentary): 0.4632 m3/h (male) and 0.5580 m3/h (female)
+    #   Walking (light):     1.2192 m3/h (male) and 1.4478 m3/h (female)
     if args.breath_rate is None:
         br_wait = (0.5 * 0.4632 + 0.5 * 0.5580) / 3600.0
         br_walk = (0.5 * 1.2192 + 0.5 * 1.4478) / 3600.0
@@ -254,7 +290,11 @@ def prepare_date_inputs(
         br_wait_h, br_walk_h = map(float, ast.literal_eval(args.breath_rate))
         breath_rate = (br_wait_h / 3600.0, br_walk_h / 3600.0)
 
-    # Diffusion rate (per second)
+    # Eddy diffusion rate (m2/s).
+    # Parameterized as D = (0.52 * AER + 8.61e-5) * V^(2/3), where
+    # AER is the air exchange rate (1/s) and V^(2/3) is the characteristic
+    # floor area (m2) scaling the room-level mixing to a diffusion coefficient.
+    # Coefficients fitted from CFD simulations (see Appendix for details).
     space_vol = float(shared["space_vol"])
     diffusion_rate = (0.52 * aer_per_s + 8.61e-5) * (space_vol ** (2 / 3))
 

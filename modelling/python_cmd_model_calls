@@ -1,3 +1,13 @@
+# ============================================================================
+# Reference: command-line invocations for run_model.py.
+#
+# This is a documentation file, not an executable script. Each command below
+# runs a different modelling scenario with specific infectiousness assumptions.
+#
+# The --quanta_mult flag takes a tuple (HIV+, confirmed TB, presumptive TB)
+# specifying relative quanta generation rate multipliers for each group.
+# ============================================================================
+
 # uncertain parameters with all equal infectious
 python3 modelling/run_model.py --name "uncertain_all_equal_infectious" --date "all" --sim "(1,100)"  
 

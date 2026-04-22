@@ -1,3 +1,16 @@
+"""Estimate air exchange rates (AER) from CO2 time series.
+
+Implements both transient mass balance and steady-state methods.
+Reads CO2 data from data-clean/environmental/co2-temp-humidity.csv
+and occupancy from data-clean/tracking/occupancy/.
+Writes to data-clean/environmental/air-exchange-rate.csv.
+
+Abbreviations:
+    aer_tmb = AER from transient mass balance
+    aer_ssm = AER from steady-state model
+    Cr      = outdoor (reference) CO2 concentration
+"""
+
 import os
 import re
 import pandas as pd
@@ -125,68 +138,69 @@ def optimize_parameters(C, n, V, G, dt, A_init, Cr_init, A_bounds, Cr_bounds):
     return {'A': result.x[0], 'Cr': result.x[1]}
 
 
-# CO2 data
-co2_df = pd.read_csv('data-clean/environmental/co2-temp-humidity.csv')
-co2_df['datetime'] = pd.to_datetime(co2_df['datetime'])
-co2_df['date'] = co2_df['datetime'].dt.date
-co2_df['datetime'] = co2_df['datetime'].dt.round('T')
-co2_df = co2_df[['device', 'date', 'datetime', 'co2', 'co2_outdoor']]
+if __name__ == "__main__":
+    # CO2 data
+    co2_df = pd.read_csv('data-clean/environmental/co2-temp-humidity.csv')
+    co2_df['datetime'] = pd.to_datetime(co2_df['datetime'])
+    co2_df['date'] = co2_df['datetime'].dt.date
+    co2_df['datetime'] = co2_df['datetime'].dt.round('T')
+    co2_df = co2_df[['device', 'date', 'datetime', 'co2', 'co2_outdoor']]
 
-# occupancy data
-occupancy_dir: str = 'data-clean/tracking/occupancy'
-paths = sorted(glob(os.path.join(occupancy_dir, '*.csv')))
-out = []
-for p in paths:
-    m = re.search(r'(\d{4}-\d{2}-\d{2})\.csv$', os.path.basename(p))
-    date_str = m.group(1)
-    df_raw = pd.read_csv(p)
-    out.append(occupancy_minute_rolling(df_raw, date_str))
-occupancy_df = pd.concat(out, ignore_index=True, copy=False)
+    # occupancy data
+    occupancy_dir: str = 'data-clean/tracking/occupancy'
+    paths = sorted(glob(os.path.join(occupancy_dir, '*.csv')))
+    out = []
+    for p in paths:
+        m = re.search(r'(\d{4}-\d{2}-\d{2})\.csv$', os.path.basename(p))
+        date_str = m.group(1)
+        df_raw = pd.read_csv(p)
+        out.append(occupancy_minute_rolling(df_raw, date_str))
+    occupancy_df = pd.concat(out, ignore_index=True, copy=False)
 
-# merge on minute-aligned datetime (left join preserves all co2 rows)
-df = pd.merge(co2_df, occupancy_df[['datetime', 'N']], on='datetime', how='left')
+    # merge on minute-aligned datetime (left join preserves all co2 rows)
+    df = pd.merge(co2_df, occupancy_df[['datetime', 'N']], on='datetime', how='left')
 
-# initialize a list to store the results
-results = []
+    # initialize a list to store the results
+    results = []
 
-# group the co2 DataFrame by device and date
-grouped_df = df.groupby(['device', 'date'])
+    # group the co2 DataFrame by device and date
+    grouped_df = df.groupby(['device', 'date'])
 
-# loop through each group (device and date)
-for (device, date), group in grouped_df:
-    C = group['co2'].tolist()
-    Co = group['co2_outdoor'].tolist()[0]
-    Co = min(min(C), Co) + 1
-    n = group['N'].tolist()
-    V = 1178.7  # Volume of waiting area in m^3
-    G = 0.004 * 60  # Assumed CO2 generation rate per person in L/min
-    dt = 5 / 60  # Timestep in hours (should be 5 minutes)
-    
-    # ensure C and n are of the same length by taking the lead of C
-    C = C[2:]  # Remove the first two values
-    n = n[1:-1]  # Remove the first (NA) and last value
+    # loop through each group (device and date)
+    for (device, date), group in grouped_df:
+        C = group['co2'].tolist()
+        Co = group['co2_outdoor'].tolist()[0]
+        Co = min(min(C), Co) + 1
+        n = group['N'].tolist()
+        V = 1178.7  # Volume of the OPD waiting area in m^3
+        G = 0.004 * 60  # CO2 generation rate per person: 0.004 L/s (Persily & de Jonge, 2017), converted to L/min
+        dt = 5 / 60  # Timestep in hours (CO2 measurements are at 5-minute intervals)
 
-    A_init = 5  # Initial value for A
-    Cr_init = Co  # Initial value for Cr
-    Cr_lower = min(300, Co)
-    Cr_upper = min(500, Co)
-    A_bounds = (0.1, 100.0)  # Bounds for A
-    Cr_bounds = (Cr_lower, Cr_upper)  # Bounds for Cr
-    
-    # transient mass balance model
-    optimized_params = optimize_parameters(C, n, V, G, dt, A_init, Cr_init, A_bounds, Cr_bounds)
-    
-    # steady state model
-    A_ssm = steady_state_model(max(n), G, V, max(C), Co)
-    
-    # append results
-    results.append({'device': device, 'date': date, 'aer_tmb': optimized_params['A'], 'Cr_tmb': optimized_params['Cr'], 'aer_ssm': A_ssm, 'Cr_ssm': Co})
+        # ensure C and n are of the same length by taking the lead of C
+        C = C[2:]  # Remove the first two values
+        n = n[1:-1]  # Remove the first (NA) and last value
 
-# convert the results to a DataFrame
-results_df = pd.DataFrame(results)
+        A_init = 5  # Initial value for A
+        Cr_init = Co  # Initial value for Cr
+        Cr_lower = min(300, Co)
+        Cr_upper = min(500, Co)
+        A_bounds = (0.1, 100.0)  # Bounds for A
+        Cr_bounds = (Cr_lower, Cr_upper)  # Bounds for Cr
 
-# sort the results DataFrame by device and then date
-results_df = results_df.sort_values(by=['device', 'date'])
+        # transient mass balance model
+        optimized_params = optimize_parameters(C, n, V, G, dt, A_init, Cr_init, A_bounds, Cr_bounds)
 
-# save the results to a CSV file without index but with header
-results_df.to_csv('data-clean/environmental/air-exchange-rate.csv', index=False, header=True)
+        # steady state model
+        A_ssm = steady_state_model(max(n), G, V, max(C), Co)
+
+        # append results
+        results.append({'device': device, 'date': date, 'aer_tmb': optimized_params['A'], 'Cr_tmb': optimized_params['Cr'], 'aer_ssm': A_ssm, 'Cr_ssm': Co})
+
+    # convert the results to a DataFrame
+    results_df = pd.DataFrame(results)
+
+    # sort the results DataFrame by device and then date
+    results_df = results_df.sort_values(by=['device', 'date'])
+
+    # save the results to a CSV file without index but with header
+    results_df.to_csv('data-clean/environmental/air-exchange-rate.csv', index=False, header=True)

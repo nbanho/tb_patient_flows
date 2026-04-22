@@ -21,6 +21,8 @@ source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/format
 ### Daily risk
 
 ```{r risk over time}
+# Load simulation results, compute per-person infection probability
+# via Wells-Riley equation: P = 1 - exp(-dose)
 # person features
 person_df <- read_csv("data-clean/tracking/person-features.csv")
 
@@ -115,6 +117,7 @@ avg_daily_risk %>%
 ```
 
 ```{r plot daily infections over time}
+# Daily expected Mtb infections with credible intervals
 # plot risk over time
 risk_time_pl <- ggplot(
   data = avg_daily_risk,
@@ -209,6 +212,7 @@ save_plot(
 ### Total risk by model
 
 ```{r risk overall}
+# Compare total infections: non-uniform mixed model (NUM) vs uniform mixed (UM)
 # overall risk
 overall_risk_df <- daily_risk_df %>%
   group_by(sim) %>%
@@ -316,9 +320,11 @@ save_plot(
 ### Person-time adjusted rate ratio
 
 ```{r adjusted rate ratio}
+# Person-time adjusted rate ratio (NUM/UM) per day
 # adjusted rate ratio per day
 daily_risk_df <- daily_risk_df %>%
   mutate(
+    # Small constant to avoid division by zero
     adjusted_rate_ratio = (infections_diffusion + 1e-3) /
       (infections_mixed + 1e-3) / (duration / 3600),
     date2 = format(date, "%b %d"),
@@ -397,6 +403,9 @@ save_plot(
 ### Estimated reduction in infections
 
 ```{r intervention effects}
+# Bayesian Gaussian regression of log-transformed infections on study phase,
+# with offsets for well-mixed risk and duration. brm_multiple() fits across
+# all Monte Carlo draws to propagate simulation uncertainty.
 # model per simulation
 daily_risk_list <- daily_risk_df %>%
   split(.$sim)
@@ -488,6 +497,8 @@ saveRDS(
 ### Estimated prevented infections
 
 ```{r prevented infections}
+# Counterfactual: predict infections under baseline conditions for
+# intervention days, compute prevented infections as the difference.
 # predict infections without interventions
 new_data <- daily_risk_df %>%
   filter(study_phase != "Baseline") %>%
@@ -564,6 +575,7 @@ prev_inf_df_summary %>%
 ## Sensitivity analyses: infectious assumptions
 
 ```{r risk by infectiousness}
+# Sensitivity: compare total infections under different infectiousness assumptions
 # files
 conf_more_infectious_files <- list.files(
   "modelling-results/uncertain_confirmed_more_infectious/",
@@ -710,6 +722,7 @@ uncertain_ratio_df_summary
 ## Stratification by gender and healtcare worker status
 
 ```{r}
+# Stratify infection rate by gender and healthcare worker status
 # hourly risk by group
 hourly_risk <- function(df, f = c(0, 1), h = c(0, 1)) {
   daily_person_risk_df %>%

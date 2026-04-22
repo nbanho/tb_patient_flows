@@ -1,3 +1,13 @@
+# ============================================================================
+# Combine individual result plots into composite figures for the paper.
+#
+# Loads saved RDS plot objects from results/ and assembles them into
+# multi-panel figures using patchwork layout.
+#
+# Reads from:  results/*.rds
+# Writes to:   results/figure_1.png, results/figure_2.png
+# ============================================================================
+
 # libraries
 library(tidyverse)
 

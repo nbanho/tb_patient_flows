@@ -1,9 +1,21 @@
+"""Read raw Xovis EVENT JSON files and write one CSV per study date.
+
+First step in the tracking pipeline. Reads per-frame tracked object positions
+from Xovis sensor JSON exports, combines files belonging to the same calendar
+date, filters to daytime hours (6 AM - 6 PM), and writes one CSV per date to
+data-clean/tracking/unlinked/.
+
+Reads from:  data-raw/xovis.nosynch/final-data/EVENT/  (JSON files)
+Writes to:   data-clean/tracking/unlinked/{date}.csv
+"""
+
 import os
 import json
 import pandas as pd
 import re
 from collections import defaultdict
 from datetime import datetime
+
 
 def event_json_to_dataframe(file_path):
 	"""
@@ -48,7 +60,7 @@ def event_json_to_dataframe(file_path):
 	
 	# Convert the data list into a pandas DataFrame
 	df = pd.DataFrame(data_list, columns=['time', 'track_id', 'type', 'position_x', 'position_y', 'person_height', 'gender', 'tag', 'face_mask', 'view_direction_x', 'view_direction_y', 'members', 'members_with_tag'])
-	# Shift time by two hours
+	# Shift timestamps by +2 hours to convert from UTC to local time (CAT, UTC+2)
 	df['time'] = df['time'] + 2 * 60 * 60 * 1000
 	return df
 
@@ -120,32 +132,33 @@ def process_files_in_folder(folder_path, files, output_csv_path, date):
 	# Save data frame to a separate CSV file
 	filtered_df.to_csv(f"{output_csv_path}{date}.csv", index=False)
 
-# Define the folder path
-folder_path = "data-raw/xovis.nosynch/final-data/EVENT/"
+if __name__ == "__main__":
+    # Define the folder path
+    folder_path = "data-raw/xovis.nosynch/final-data/EVENT/"
 
-# Get all file names in the specified folder
-file_names = os.listdir(folder_path)
+    # Get all file names in the specified folder
+    file_names = os.listdir(folder_path)
 
-# Regular expression to extract date in the format %Y-%m-%d
-date_pattern = re.compile(r'\d{4}-\d{2}-\d{2}')
+    # Regular expression to extract date in the format %Y-%m-%d
+    date_pattern = re.compile(r'\d{4}-\d{2}-\d{2}')
 
-# Dictionary to store grouped file names by date
-grouped_files = defaultdict(list)
+    # Dictionary to store grouped file names by date
+    grouped_files = defaultdict(list)
 
-for file_name in file_names:
-    # Extract date from file name
-    match = date_pattern.search(file_name)
-    if match:
-        date = match.group(0)
-        grouped_files[date].append(file_name)
+    for file_name in file_names:
+        # Extract date from file name
+        match = date_pattern.search(file_name)
+        if match:
+            date = match.group(0)
+            grouped_files[date].append(file_name)
 
-# Convert defaultdict to a regular dictionary and print the result
-grouped_files = dict(grouped_files)
-cutoff_date = datetime.strptime('2024-06-16', '%Y-%m-%d')
-grouped_files = {date: files for date, files in grouped_files.items() if datetime.strptime(date, '%Y-%m-%d') > cutoff_date}
-grouped_files = dict(sorted(grouped_files.items(), key=lambda item: datetime.strptime(item[0], '%Y-%m-%d')))
+    # Exclude sensor test data before the study start (data collection began June 17, 2024)
+    grouped_files = dict(grouped_files)
+    cutoff_date = datetime.strptime('2024-06-16', '%Y-%m-%d')
+    grouped_files = {date: files for date, files in grouped_files.items() if datetime.strptime(date, '%Y-%m-%d') > cutoff_date}
+    grouped_files = dict(sorted(grouped_files.items(), key=lambda item: datetime.strptime(item[0], '%Y-%m-%d')))
 
-# process files by date
-for date in list(grouped_files.keys()):
-	print(f"Processing files for date: {date}")
-	process_files_in_folder(folder_path, grouped_files[date], "data-clean/tracking/unlinked/", date)
+    # process files by date
+    for date in list(grouped_files.keys()):
+        print(f"Processing files for date: {date}")
+        process_files_in_folder(folder_path, grouped_files[date], "data-clean/tracking/unlinked/", date)

@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""Rasterize 2 Hz tracking positions into a spatial grid of person-seconds per cell per day.
+
+Writes an HDF5 file used for the spatial heatmap visualization.
+Reads linked tracking data. Writes to data-clean/tracking/spatial-density.h5.
+"""
+
 import argparse
 import os
 import numpy as np
@@ -7,6 +13,7 @@ from read_tracking_linked_data import read_linked_tracking_data, pad_track_data
 import h5py
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+# Default spatial extent (meters) matching the Xovis sensor footprint
 EXTENT_DEFAULT = (0.0, 51.0, -0.02, 14.214)  # (min_x, max_x, min_y, max_y)
 
 def rasterize_person_time(date: str, extent, cell_size: float) -> np.ndarray:
@@ -45,7 +52,7 @@ def rasterize_person_time(date: str, extent, cell_size: float) -> np.ndarray:
     # Linearize 2D indices for bincount
     lin_idx = y_idx * num_cells_x + x_idx
 
-    # Each observation represents 0.5 seconds at 2 Hz
+    # Each observation represents 0.5 seconds (2 Hz tracking rate)
     weights = np.full(lin_idx.shape[0], 0.5, dtype=np.float32)
 
     # Sum person-time per cell
@@ -56,6 +63,7 @@ def rasterize_person_time(date: str, extent, cell_size: float) -> np.ndarray:
 
 
 def process_one(date: str, extent, cell_size: float):
+    """Process and save spatial density for a single date."""
     counts = rasterize_person_time(date, extent, cell_size)
     return date, counts
 

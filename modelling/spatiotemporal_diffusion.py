@@ -1,8 +1,17 @@
+"""Finite-difference solver for 2D diffusion with first-order removal.
+
+Implements a backward-Euler scheme on a masked 2D grid using LU-factorized
+sparse linear algebra. The 5-point Laplacian stencil approximates isotropic
+eddy diffusion of airborne quanta, and a first-order term represents combined
+removal by ventilation, settling, and inactivation.
+
+Consumed by run_model.py to simulate spatiotemporal quanta concentrations.
+"""
+
 import numpy as np
-from scipy.integrate import solve_ivp
-from scipy.ndimage import convolve
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
+
 
 def prepare_be_solver(mask, dx, diffusion_rate, removal_rate, dt):
     """
@@ -40,7 +49,7 @@ def prepare_be_solver(mask, dx, diffusion_rate, removal_rate, dt):
     idx_map = -np.ones(N, dtype=int)
     idx_map[keep] = np.arange(nk)
 
-    # Diffusion coefficient
+    # Discretized diffusion coefficient: D / dx^2 (1/s)
     alpha = diffusion_rate / dx**2
 
     # Build sparse Laplacian for active cells (5-point stencil)
@@ -67,7 +76,9 @@ def prepare_be_solver(mask, dx, diffusion_rate, removal_rate, dt):
 
     K = sp.csr_matrix((data, (rows, cols)), shape=(nk, nk))
 
-    # Backward Euler system matrix: (I - dt * operator)
+    # Backward Euler system matrix: M = I - dt*(K - lambda*I)
+    # where K is the Laplacian and lambda is the first-order removal rate.
+    # Solving M * y_{n+1} = y_n + dt*S gives the implicit time step.
     M = sp.eye(nk, format='csr') - dt * (K - removal_rate * sp.eye(nk, format='csr'))
 
     # LU factorization
@@ -132,7 +143,7 @@ def solve_diffusion_be(grid, infectious_positions, t_span, dt,
         y_full[keep] = y_reduced
         results.append(y_full.reshape((nrows, ncols)).copy())
 
-        # Backward-Euler RHS
+        # Backward-Euler RHS: y_n + dt * S (source term)
         rhs = y_reduced + dt * src_reduced
         y_reduced = solver(rhs)  # uses pre-factorized LU
 

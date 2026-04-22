@@ -17,6 +17,8 @@ source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotti
 source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
 ```
 
+Load clinical TB case data and merge with study phase classifications.
+
 ```{r load data}
 # load data
 clinical_df <- read_csv("data-clean/clinical/tb_cases.csv")
@@ -68,6 +70,7 @@ clinical_df <- clinical_df %>%
 ## Linelist data
 
 ```{r linelist data}
+# Generate a formatted table of individual TB patient characteristics
 # full data
 full_clinical_df <- readxl::read_excel(
   "data-raw/clinical/complete-clinic-data edit 17.02.25.xlsx"
@@ -142,6 +145,7 @@ clinical_df %>%
 ## Descriptive summaries
 
 ```{r descriptive summaries}
+# Descriptive statistics of clinical data stratified by study phase
 # study days
 sprintf("First study day: %s", min(interventions$date))
 sprintf("Last study day: %s", max(interventions$date))
@@ -239,6 +243,7 @@ clinical_df %>%
 ## TB cases over time
 
 ```{r tb cases over time}
+# Plot daily counts of TB cases across the study period
 # confirmed and presumptive TB cases over time
 tb_cases_time_df <- clinical_df %>%
   filter(tb_status != "not infectious") %>%

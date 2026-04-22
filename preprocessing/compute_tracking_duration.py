@@ -1,3 +1,9 @@
+"""Compute total time-in-clinic for each linked track across all study dates.
+
+Reads linked tracking data via read_tracking_linked_data. Writes to
+data-clean/tracking/time-in-clinic.csv.
+"""
+
 import pandas as pd
 import os
 import time
@@ -55,4 +61,5 @@ def process_all_dates():
     # Store the combined DataFrame to a CSV file
     combined_df.to_csv(output_file, index=False, header=True)
 
-process_all_dates()
+if __name__ == "__main__":
+    process_all_dates()

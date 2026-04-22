@@ -1,3 +1,14 @@
+# ============================================================================
+# Check Monte Carlo convergence of simulation results.
+#
+# Plots cumulative quantiles of expected infections across simulations for
+# one example date, verifying that the median and credible intervals stabilize
+# as the number of simulations increases.
+#
+# Reads from:  modelling-results/uncertain_all_equal_infectious/2024-06-26/
+# Writes to:   results/modelling_convergence.png
+# ============================================================================
+
 library(tidyverse)
 
 source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotting.R")
@@ -25,6 +36,7 @@ sim_daily_inf %>%
   ggplot(aes(x = sim, y = exp_inf)) +
   geom_point() +
   geom_segment(aes(yend = 0, xend = sim))
+# Running quantile: compute quantile over the first 1..n elements
 cumquantile <- function(x, p = .5) {
   purrr::map_dbl(seq_along(x), ~ quantile(x[1:.x], p))
 }

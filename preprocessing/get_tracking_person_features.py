@@ -1,13 +1,13 @@
-# Libraries
-from concurrent.futures import ProcessPoolExecutor
+"""Extract per-person demographic features from tracking data.
+
+Determines gender via majority vote across observations and healthcare worker
+status from tag presence. Writes to data-clean/tracking/person-features.csv.
+"""
+
 import pandas as pd
-import numpy as np
 import os
-import time
-from read_tracking_linked_data import read_linked_tracking_data 
-import argparse
-import concurrent.futures
-from functools import partial
+from read_tracking_linked_data import read_linked_tracking_data
+
 
 # Get gender and healthcare worker status per person
 def add_person_features(result_df, non_tb_df):
@@ -48,33 +48,34 @@ def add_person_features(result_df, non_tb_df):
     return result_df
 
 
-# loop over dates and process
-linked_tb_path = 'data-clean/tracking/linked-tb/'
-dates = [
-    file.replace('.csv', '') 
-    for file in os.listdir(linked_tb_path) 
-    if file.endswith('.csv')
-]
-result_list = []
+if __name__ == "__main__":
+    # loop over dates and process
+    linked_tb_path = 'data-clean/tracking/linked-tb/'
+    dates = [
+        file.replace('.csv', '')
+        for file in os.listdir(linked_tb_path)
+        if file.endswith('.csv')
+    ]
+    result_list = []
 
-for date in dates:
-    print(f'Processing date: {date}')
-    
-    # Read tracking data
-    df = read_linked_tracking_data(date)
-    
-    # Filter non-TB patients
-    non_tb_df = df[df['clinic_id'].isna()]
-    
-    # Resulting dataframe with features
-    result_df = pd.DataFrame({'new_track_id': non_tb_df['new_track_id'].unique()})
-    result_df['date'] = date
-    
-    # Add person features
-    result_df = add_person_features(result_df, non_tb_df)
-    result_list.append(result_df)
-    
-# combine all dates
-final_df = pd.concat(result_list, ignore_index=True)
-output_file = os.path.join('data-clean/tracking/', 'person-features.csv')
-final_df.to_csv(output_file, index=False)
+    for date in dates:
+        print(f'Processing date: {date}')
+
+        # Read tracking data
+        df = read_linked_tracking_data(date)
+
+        # Filter non-TB patients
+        non_tb_df = df[df['clinic_id'].isna()]
+
+        # Resulting dataframe with features
+        result_df = pd.DataFrame({'new_track_id': non_tb_df['new_track_id'].unique()})
+        result_df['date'] = date
+
+        # Add person features
+        result_df = add_person_features(result_df, non_tb_df)
+        result_list.append(result_df)
+
+    # combine all dates
+    final_df = pd.concat(result_list, ignore_index=True)
+    output_file = os.path.join('data-clean/tracking/', 'person-features.csv')
+    final_df.to_csv(output_file, index=False)

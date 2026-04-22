@@ -1,3 +1,12 @@
+"""Link interrupted person movement tracks across time gaps.
+
+Uses spatiotemporal criteria (time gap, spatial distance, and zone membership)
+to find plausible track continuations and reassign track IDs. Parameters are
+applied in 8 rounds of increasing permissiveness. Reads from
+data-clean/tracking/unlinked/. Writes linkage tables to
+data-clean/tracking/linked/.
+"""
+
 import os
 import pandas as pd
 import numpy as np
@@ -197,25 +206,6 @@ def process_tracks(initial_dataset: pd.DataFrame, parameters: list) -> pd.DataFr
     return updated_dataset
 
 
-# testing
-# test_old = pd.read_csv("data-clean/tracking/unlinked/2024-06-26.csv")
-# max_time_quick = [5, 5, 10, 10, 20, 20]
-# max_time_quick = [x * 1000 for x in max_time_quick]
-# max_dist_quick = [0.5, 1, 0.5, 1, 0.5, 1]
-# max_time_walk = [10, 10, 20, 20, 30, 30]
-# max_time_walk = [x * 1000 for x in max_time_walk]
-# max_dist_walk = [1, 2, 1, 2, 1, 2]
-# max_time_sit = [60, 60, 120, 120, 300, 300]
-# max_time_sit = [x * 1000 for x in max_time_sit]
-# max_dist_sit = [0.25, 0.5, 0.25, 0.5, 0.25, 0.5]
-# max_time_tba = [30, 30, 60, 60, 120, 120]
-# max_time_tba = [x * 1000 for x in max_time_tba]
-# max_dist_tba = [0.25, 0.5, 0.25, 0.5, 0.25, 0.5]
-# params = [max_time_walk, max_dist_walk, max_time_sit, max_dist_sit, max_time_quick, max_dist_quick, max_time_tba, max_dist_tba]
-# test_new = process_tracks(test_old, params)
-# unique_mappings = test_new[['raw_track_id', 'track_id']].drop_duplicates()
-# unique_mappings.to_csv("data-clean/tracking/linked/2024-06-26.csv", index=False)
-
 def read_and_process_tracks(file: str, pars = list):
     print(f"Processing file: {file}")
     uldf = pd.read_csv(os.path.join('../data-clean/tracking/unlinked/', file))
@@ -226,12 +216,12 @@ def read_and_process_tracks(file: str, pars = list):
 
 
 if __name__ == "__main__":
-        # files
+        # Dates excluded due to data quality issues
         files_to_remove = ["2024-06-20.csv", "2024-06-24.csv", "2024-07-03.csv", "2024-07-26"]
         unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv') and f not in files_to_remove]
-        # unlinked_files = [f for f in os.listdir('../data-clean/tracking/unlinked/') if f.endswith('.csv')]
         
-        # processing parameters
+        # Linking parameters applied in 8 rounds of increasing permissiveness.
+        # Units: time in milliseconds, distance in meters.
         max_time_quick = [5, 5, 10, 10, 20, 20, 30, 30]
         max_time_quick = [x * 1000 for x in max_time_quick]
         max_dist_quick = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1]

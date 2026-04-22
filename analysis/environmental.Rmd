@@ -14,6 +14,8 @@ source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotti
 source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
 ```
 
+Load CO2, temperature, humidity, and air exchange rate (AER) data.
+
 ```{r load data}
 # load data
 aer_df <- read_csv("data-clean/environmental/air-exchange-rate.csv")
@@ -63,6 +65,7 @@ aer_df <- aer_df %>%
 ## Descriptive summaries
 
 ```{r descriptive summaries}
+# Summary statistics for CO2, temperature, humidity, and AER by study phase
 # co2
 co2_summary <- co2_df %>%
   filter(device == "Aranet4 272D2") %>%
@@ -138,6 +141,7 @@ aer_df %>%
 # absolute ventilation rates
 aer_df %>%
   filter(device == "Aranet4 272D2") %>%
+  # Volume of the waiting area (m^3); used to convert AER to absolute ventilation rate (L/s)
   mutate(vent_rate = aer_tmb * 1178.70 / 3.6) %>%
   summarise(across(vent_rate, .fns = list(
     median = ~ median(.x),
@@ -183,6 +187,7 @@ cor.test(aer_df$Cr_tmb, aer_df$Cr_ssm)
 ## CO2 over time
 
 ```{r co2 over time}
+# Diurnal CO2 concentration profiles
 daytime_co2_df <- co2_df %>%
   filter(device == "Aranet4 272D2") %>%
   group_by(time) %>%
@@ -246,6 +251,7 @@ saveRDS(co2_pl, "results/environmental_co2_over_time.rds")
 ## Correlation between CO2 measurements
 
 ```{r correlation co2 measurements}
+# Compare CO2 readings from the two Aranet4 monitors
 # co2 summary by device
 co2_by_device_df <- co2_df %>%
   group_by(time, device) %>%
@@ -347,6 +353,7 @@ save_plot(
 ### Air exchange rate by model
 
 ```{r aer by model}
+# Compare AER estimates from transient mass balance (TMB) vs steady-state (SSM) models
 aer_by_model_df <- aer_df %>%
   filter(device == "Aranet4 272D2") %>%
   dplyr::select(date, aer_tmb, aer_ssm) %>%

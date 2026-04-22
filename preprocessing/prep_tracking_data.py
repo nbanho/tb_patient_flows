@@ -1,3 +1,13 @@
+"""Filter and annotate raw Xovis tracking data with spatial zone membership.
+
+Filters short tracks by duration, then annotates each position with boolean
+flags for proximity to entry zones, seating areas, TB screening, and sputum
+collection areas. Zone geometries are measured from the architectural floor plan.
+
+Reads from:  data-clean/tracking/unlinked/{date}.csv  (raw tracking positions)
+Writes to:   data-clean/tracking/unlinked/{date}.csv  (overwritten in-place)
+"""
+
 import os
 import pandas as pd
 import json
@@ -5,8 +15,6 @@ import numpy as np
 from shapely.geometry import Point, Polygon
 from shapely.ops import unary_union
 from concurrent.futures import ProcessPoolExecutor
-
-# filter data based on duration and distance
 
 def compute_group_duration(group: pd.DataFrame) -> int:
     """Computes the duration of a single group."""
@@ -90,12 +98,12 @@ if __name__ == "__main__":
         output_folder_path = '../data-clean/tracking/unlinked/'
         
         # Filter parameters
-        filt_duration = 10 * 1000
+        filt_duration = 10 * 1000  # minimum track duration: 10 seconds (in ms)
         filt_distance = None
-        
-        # Annotation parameters
-        cons_buff_dist = 0.15
-        main_buff_dist = 0.25
+
+        # Buffer distance (meters) around entry zones for 'near_entry' annotation
+        cons_buff_dist = 0.15  # consultation/registration entries (smaller doorways)
+        main_buff_dist = 0.25  # main entrance (wider doorway)
         
         # Entries
         with open('../data-raw/background/config.json') as f:
@@ -110,27 +118,27 @@ if __name__ == "__main__":
             entry_buffered_polygons.append(Polygon(geometry['geometry']).buffer(buffer_distance))
         entry_polygon = unary_union(entry_buffered_polygons)
         
-        # Seating area
+        # Seating area polygons (coordinates in meters from floor plan)
         seating_geometries = []
-        seating_area_1_geometry = {
+        seating_area_1_geometry = {  # main seating rows in the south wing
             'geometry': [[11.31, 2.6], [47.5, 2.6], [47.5, 6.5], [11.31, 6.5]],
             'type': 'ZONE',
             'name': 'seating area 1'
         }
         seating_geometries.append(seating_area_1_geometry)
-        seating_area_2_geometry = {
+        seating_area_2_geometry = {  # south wing front row
             'geometry': [[13.5, 0], [47.5, 0], [47.5, 1.75], [13.5, 1.75]],
             'type': 'ZONE',
             'name': 'seating area 2'
         }
         seating_geometries.append(seating_area_2_geometry)
-        seating_area_3_geometry = {
+        seating_area_3_geometry = {  # north wing seating
             'geometry': [[8-1.8-0.7, 8.8], [8-1.8, 8.8], [8-1.8, 8.8+4], [8-1.8-0.7, 8.8+4]],
             'type': 'ZONE',
             'name': 'seating area 3'
         }
         seating_geometries.append(seating_area_3_geometry)
-        seating_area_4_geometry = {
+        seating_area_4_geometry = {  # corridor seating
             'geometry': [[8.2-2.4, 6.3], [8.2, 6.3], [8.2, 6.3+.5], [8.2-2.4, 6.3+.5]],
             'type': 'ZONE',
             'name': 'seating area 4'
@@ -138,8 +146,8 @@ if __name__ == "__main__":
         seating_geometries.append(seating_area_4_geometry)
         seating_polygon = unary_union([Polygon(geometry['geometry']) for geometry in seating_geometries])
 
-        # TB area
-        check_area = [[8, .8], [11.3, .8], [11.3, 6.2], [8, 6.2]]
+        # Clinical zones (coordinates in meters from floor plan)
+        check_area = [[8, .8], [11.3, .8], [11.3, 6.2], [8, 6.2]]  # triage/check-in area
         check_area = {
             'geometry': check_area,
             'type': 'ZONE',

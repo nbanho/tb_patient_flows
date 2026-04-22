@@ -1,3 +1,10 @@
+"""Assign grid cell indices and walking/sitting activity status to tracking positions.
+
+Separates TB and non-TB patient positions for downstream modelling.
+Reads linked tracking data and building grid mask.
+Writes to data-clean/tracking/{tb,non-tb}-positions/{date}.csv.
+"""
+
 from concurrent.futures import ProcessPoolExecutor
 import pandas as pd
 import numpy as np
@@ -15,20 +22,10 @@ save_path_non_tb = os.path.join(base_path, 'non-tb-positions/')
 # Study dates
 linked_tb_path = 'data-clean/tracking/linked-tb/'
 dates = [
-    file.replace('.csv', '') 
-    for file in os.listdir(linked_tb_path) 
+    file.replace('.csv', '')
+    for file in os.listdir(linked_tb_path)
     if file.endswith('.csv')
 ]
-# dates = ['2024-06-24']
-# # Exclude dates where both output files already exist
-# dates = [
-#     date for date in dates
-#     if not (
-#         os.path.exists(os.path.join(save_path_tb, f'{date}.csv')) and
-#         os.path.exists(os.path.join(save_path_non_tb, f'{date}.csv'))
-#     )
-# ]
-# dates = dates[0:1]
 
 # Grid coordinates
 mask = np.load('data-clean/building/building-grid-mask.npy')
@@ -36,6 +33,7 @@ valid_indices = np.argwhere(mask)
 valid_positions = np.load('data-clean/building/building-grid-mask-valid-positions.npy')
 tree = cKDTree(valid_positions)
 def get_cell_indices_batch(x_points, y_points):
+    """Map (x, y) positions to nearest valid grid cell indices using a KD-tree."""
     dists, nearest_idx = tree.query(np.column_stack((x_points, y_points)), k=1)
     nearest_cells = valid_indices[nearest_idx]
     x_idx = nearest_cells[:, 1]
@@ -44,7 +42,8 @@ def get_cell_indices_batch(x_points, y_points):
 
 # Determine activity status using Numba for performance
 @njit
-def compute_is_walking(coords, track_ids, threshold=0.25):
+def compute_is_walking(coords, track_ids, threshold=0.25):  # Walking threshold: 0.25 m/s displacement
+    """Classify each timestep as walking or sitting based on displacement threshold."""
     n = coords.shape[0]
     is_walk = np.zeros(n, dtype=np.int8)
     thr_sq = threshold * threshold
@@ -68,6 +67,7 @@ def compute_is_walking(coords, track_ids, threshold=0.25):
 # Aggregate TB patient positions
 @njit
 def find_change_points(arr):
+    """Find indices where the array value changes (for run-length compression)."""
     n = len(arr)
     change_points = [0]
     for i in range(1, n):
@@ -78,6 +78,7 @@ def find_change_points(arr):
 
 
 def process_date(date):
+    """Process one study date: assign grid cells, detect activity, and save positions."""
     # Settings
     chunk_size = 500_000
     
@@ -112,7 +113,7 @@ def process_date(date):
     df = df[~df['clinic_id'].isna()]
     
     # Group once and fill positions
-    n_seconds = 12 * 60 * 60 + 1  # 0..12h inclusive
+    n_seconds = 12 * 60 * 60 + 1  # 12 hours (6 AM to 6 PM inclusive)
     positions_array = [[] for _ in range(n_seconds)]
     for t, g in df.groupby('time', sort=False):
         tuples = [tuple(map(int, row)) for row in g[['new_track_id', 'x_i', 'y_k', 'is_walking']].to_numpy()]

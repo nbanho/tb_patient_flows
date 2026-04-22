@@ -1,4 +1,19 @@
+"""Compute inhaled quanta doses for individual non-TB patients.
+
+Integrates the spatiotemporal quanta concentration field at each person's
+tracked positions to compute the cumulative inhaled dose per hour. Two
+exposure metrics are computed:
+  - Diffusive (spatiotemporal): concentration at the person's actual location.
+  - Well-mixed (uniform): average concentration across all active grid cells.
+
+The returned quanta doses Q can be converted to infection probability using
+the Wells-Riley equation: P = 1 - exp(-Q).
+
+Consumed by run_model.py.
+"""
+
 import numpy as np
+
 
 def compute_exposure(
     df_id,
@@ -98,7 +113,10 @@ def compute_exposure(
         c_all_h = np.maximum(c_all_h, 0.0)
         c_mixed_h = np.sum(c_all_h, axis=(1, 2)) / float(n_active)
 
-        # Integrate over steps present in this hour
+        # Integrate inhaled dose over steps present in this hour.
+        # Division by V converts total quanta in the cell to volumetric
+        # concentration (quanta/m3); multiplying by inhalation rate (m3/s)
+        # and dt (s) gives inhaled quanta per step.
         Q_diffu_hour = float(np.sum(c_diffu_h * ihr_h / V) * dt_seconds)
         Q_mixed_hour = float(np.sum(c_mixed_h * ihr_h / V) * dt_seconds)
 

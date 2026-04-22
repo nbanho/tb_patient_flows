@@ -16,6 +16,8 @@ source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/plotti
 source("https://raw.githubusercontent.com/nbanho/helper/refs/heads/main/R/formatting.R")
 ```
 
+Load occupancy time series, entry counts, and track durations.
+
 ```{r load data}
 # files
 files <- list.files("data-clean/tracking/occupancy",
@@ -82,6 +84,7 @@ track_times_df <- data.table::fread(
 ## Descriptive summaries
 
 ```{r person visits and movements}
+# Descriptive statistics: daily visits, movements, and durations
 # number of entries
 entries_df <- counts_df %>%
   filter(name == "entry_main") %>%
@@ -204,6 +207,7 @@ save_plot(
 ## Occupancy over time
 
 ```{r occupancy over time}
+# Diurnal occupancy profiles by weekday
 daytime_occupancy_df <- occupancy_df %>%
   group_by(time) %>%
   summarise(
@@ -304,6 +308,7 @@ saveRDS(occupancy_pl, "results/tracking_occupancy_over_time.rds")
 ## Density over time
 
 ```{r density over time}
+# Diurnal Gini coefficient (spatial clustering) over time
 daytime_density_df <- occupancy_df %>%
   mutate(
     across(c(gini_kde, entropy_kde), ~ ifelse(N <= 10, NA, .x))
@@ -408,7 +413,9 @@ ggplot(daily_density_df, aes(x = study_phase, y = gini)) +
     plot.margin = margin(r = 12)
   )
 
-# model
+# Bayesian Beta regression of Gini coefficient on study phase and weekday.
+# Beta family is appropriate because Gini is bounded in (0,1).
+# Default logit link; iter=500 with 4 chains; seed for reproducibility.
 gini_model <- brms::brm(
   gini ~ study_phase + weekday,
   data = daily_density_df,
@@ -499,6 +506,7 @@ saveRDS(
 ## Sensitivity analysis: Kernel and metric comparison
 
 ```{r sensitivity load data}
+# Sensitivity analysis: compare Gaussian vs exponential kernels and Gini vs Shannon entropy
 # load sensitivity data
 sens_files <- list.files("data-clean/tracking/occupancy-sensitivity",
   pattern = "\\.csv$", full.names = TRUE

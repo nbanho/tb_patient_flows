@@ -1,3 +1,10 @@
+"""Read Xovis line-counting logic JSON files and combine into a single CSV.
+
+Extracts entry/exit counts at defined logical lines (e.g., main entrance,
+consultation rooms). Reads from data-raw/xovis.nosynch/final-data/LINE/.
+Writes to data-clean/tracking/counts/counts.csv.
+"""
+
 import os
 import json
 import pandas as pd
@@ -34,22 +41,21 @@ def read_counts_json(file_path):
     df = pd.DataFrame(data_list, columns=['id', 'name', 'from', 'to', 'type', 'count'])
     return df
 
-# a = read_counts_json("data-raw/xovis.nosynch/final-data/LINE/logics_ms000732AB8D11_2_2024-05-17T13-05-00Z_id0.json")
-
-# Define the folder path
-folder_path = "data-raw/xovis.nosynch/final-data/LINE/"
-all_dfs = []
-for filename in os.listdir(folder_path):
-    if filename.endswith(".json"):
-        file_path = os.path.join(folder_path, filename)
-        try:
-            df = read_counts_json(file_path)
-            all_dfs.append(df)
-        except Exception as e:
-            print(f"Skipping {filename} due to error: {e}")
-if all_dfs:
-    final_df = pd.concat(all_dfs, ignore_index=True)
-    os.makedirs("data-clean/tracking/counts", exist_ok=True)
-    final_df.to_csv("data-clean/tracking/counts/counts.csv", index=False)
-else:
-    print("No valid dataframes to concatenate.")
+if __name__ == "__main__":
+    # Define the folder path
+    folder_path = "data-raw/xovis.nosynch/final-data/LINE/"
+    all_dfs = []
+    for filename in os.listdir(folder_path):
+        if filename.endswith(".json"):
+            file_path = os.path.join(folder_path, filename)
+            try:
+                df = read_counts_json(file_path)
+                all_dfs.append(df)
+            except Exception as e:
+                print(f"Skipping {filename} due to error: {e}")
+    if all_dfs:
+        final_df = pd.concat(all_dfs, ignore_index=True)
+        os.makedirs("data-clean/tracking/counts", exist_ok=True)
+        final_df.to_csv("data-clean/tracking/counts/counts.csv", index=False)
+    else:
+        print("No valid dataframes to concatenate.")
