@@ -174,7 +174,7 @@ This fits Bayesian Beta regression models of the Gini coefficient on study phase
 
 ### B. Transmission modelling (infection risk and intervention effects)
 
-This pipeline reproduces the Wells-Riley spatiotemporal transmission risk simulations and the estimation of intervention effects on Mtb infections.
+This pipeline reproduces the Wells-Riley spatiotemporal transmission risk simulations and the estimation of intervention effects on Mtb infections. The model construction, parameter assumptions, and effect estimation approach are described in detail in the Supplementary Information of the paper.
 
 **Step B1: Generate position inputs for the model**
 
@@ -218,7 +218,7 @@ This estimates daily expected Mtb infections, computes intervention effects via 
 
 ### C. Environmental analysis
 
-The environmental sensor data and air exchange rate estimates are already included in `data-clean/environmental/`. To reproduce the AER estimation and the environmental analysis:
+The environmental sensor data and air exchange rate estimates are already included in `data-clean/environmental/`. The AER estimation method (transient mass balance model fitted to CO2 decay curves) is described in detail in the Supplementary Information of the paper. To reproduce the AER estimation and the environmental analysis:
 
 ```bash
 # Recompute air exchange rates from CO2 data (optional; output already included)
