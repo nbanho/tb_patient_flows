@@ -14,3 +14,4 @@ __pycache__/
 *_old/
 **/*_old/
 data-clean/tracking/spatial-density.h5
+data-clean/clinical/tb_cases.csv
