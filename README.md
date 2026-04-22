@@ -1,25 +1,218 @@
-# Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital: a modelling study based on person movements, environmental and clinical data
+# Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital
 
-This repository contains the code accompanying the paper "Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital: a modelling study based on person movements, environmental and clinical data" by Banholzer et al.
+Code and data accompanying the paper *"Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital: a modelling study based on person movements, environmental and clinical data"* by Banholzer et al., published in PLOS Medicine.
 
-The repository is structed as follows:
+## Study summary
 
-1. **analysis**: R Markdown and Jupyter Notebooks for descriptive analysis of the different types of data (clinical, environmental and person-tracking data), analysis of the modelling results, and estimation of the intervention effects.
-2. *data-check*: Internally used code files to inspect and check the raw and cleaned data.
-3. *data-clean*: Empty, all data will be made available upon publication.
-4. *data-raw*: Empty, all data will be made available upon publication.
-5. *doc*: Empty, placeholder for text files for article writing, publication and study documentation.
-6. *modelling-results*: Empty, folder where the simulation results from modelling are stored.
-7. **modelling**: Python code files for the spatiotemporal extension of the Wells-Riley model to estimate the transmission risk of Mycobacterium tuberculosis (Mtb) in the Zambian hospital.
-8. **preprocessing:** R and Python code files to preprocess the raw data, prepare the input data for modelling, and compute spatial density and ventilation measures.
-9. *results*: Empty, placeholder for descriptive, modelling and estimation result figures.
+This study quantifies airborne *Mycobacterium tuberculosis* (Mtb) transmission risk in the outpatient department (OPD) of a hospital in Lusaka, Zambia, using integrated person-tracking, environmental, and clinical data collected over 52 study days (June–August 2024). Two cumulative interventions designed to reduce spatial clustering were evaluated:
 
-The important code files are as follows:
+1. **First intervention** (July 1–15): optimized waiting-area seating layout with physical distancing measures.
+2. **Second intervention** (July 16–29): added a one-way patient flow system.
 
-- **analysis/modelling.rmd:** Contains code to analyse the simulation results for Mtb transmission risk and performs estimation of the IPC intervention effects on transmission.
-- **analysis/tracking.rmd:**: Contains code to analyse the person tracking data and performs estimation of the IPC intervention effects on the spatial clustering of people.
-- **modelling/run_model.py:** Runs the spatiotemporal Wells-Riley model for the Zambian hospital.
-- **modelling/spatiotemporal_diffusion.py:** Python implementation of the general spatiotemporal Wells-Riley model used in modelling/run_model.py.
-- **preprocessing/compute_spatial_tracking_density.py**: Computes the Gini coefficient (a measure for the spatial clustering of people) based on smoothed person counts in the hospital's waiting area.
-- **preprocessing/compute_environmental_aer.py**: Computes the outdoor air exchange rate based on CO_2 measurements and hospital occupancy.
-- **preprocessing/link_tb_app.R**: R Shiny App to manually identify person movements probably belonging to TB patients and linking their possibly interrupted movements.
+Transmission risk is estimated using a spatiotemporal extension of the Wells-Riley model. A 2D diffusion–removal PDE simulates quanta concentrations emitted by infectious TB patients at their tracked positions, and inhaled doses are computed for all non-TB individuals. This non-uniform mixed model (NUM) captures proximity effects and is compared against a conventional uniform well-mixed model (UM).
+
+Key findings: the first intervention reduced spatial clustering by 24% and Mtb transmission risk by 39%; the second intervention reduced clustering by 13% and transmission risk by 21%.
+
+## Requirements
+
+### Python
+
+Python 3.11 or later. Install the required packages:
+
+```bash
+pip install numpy pandas scipy shapely h5py numba
+```
+
+### R
+
+R 4.3 or later. Install the required packages:
+
+```r
+install.packages(c("tidyverse", "lubridate", "brms", "tidybayes",
+                    "parallel", "ggpubr", "data.table"))
+```
+
+The analysis files also source helper functions for plotting and formatting from [github.com/nbanho/helper](https://github.com/nbanho/helper).
+
+## Repository structure
+
+```
+tb_patient_flows/
+├── analysis/                  Analysis scripts (R Markdown, Jupyter)
+│   ├── clinical.Rmd           Descriptive analysis of clinical TB data
+│   ├── environmental.Rmd      CO2, ventilation, and environmental conditions
+│   ├── tracking.Rmd           Person movements, spatial clustering, intervention effects
+│   ├── tracking.ipynb         Spatial density heatmap visualisation (Python)
+│   └── modelling.Rmd          Transmission risk, intervention effects, sensitivity analyses
+│
+├── preprocessing/             Data preprocessing pipeline (Python, R)
+│   ├── read_tracking_flows.py            Convert raw Xovis JSON to per-date CSVs
+│   ├── read_tracking_counts.py           Extract entry/exit counts from Xovis JSON
+│   ├── prep_tracking_data.py             Filter tracks, annotate spatial zones
+│   ├── link_tracking_interrupted_tracks.py  Link interrupted person movements
+│   ├── link_clinical_tracking.py         Link TB case IDs to tracking data
+│   ├── link_tb_app.R                     Interactive Shiny app for manual TB patient linkage
+│   ├── prep_clinical_data.py             Preprocess clinical questionnaire data
+│   ├── prep_environmental_data.py        Consolidate CO2 sensor data
+│   ├── mapping_dates_interventions.py    Create study phase timeline
+│   ├── read_tracking_linked_data.py      Shared utility to read linked tracking data
+│   ├── compute_tracking_duration.py      Compute time-in-clinic per person
+│   ├── compute_tracking_spatial_density.py   Gini coefficient and Shannon entropy
+│   ├── compute_tracking_spatial_density_sensitivity.py  Sensitivity: alternative kernels
+│   ├── compute_tracking_spatial_counts.py    Rasterise positions into spatial grid (HDF5)
+│   ├── compute_environmental_aer.py      Estimate air exchange rates from CO2
+│   ├── get_tracking_positions.py         Assign grid cells and activity status
+│   ├── get_tracking_person_features.py   Extract gender and healthcare worker status
+│   └── combine_multiple_figures.r        Assemble composite paper figures
+│
+├── modelling/                 Wells-Riley transmission model (Python, R)
+│   ├── run_model.py                  Main simulation entry point
+│   ├── spatiotemporal_diffusion.py   2D diffusion–removal PDE solver
+│   ├── compute_quanta_exposure.py    Inhaled quanta dose computation
+│   ├── create_building_mask.py       Building grid geometry and floor-plan mask
+│   ├── modelling_assumptions.r       Sample uncertain model parameters (Monte Carlo)
+│   ├── check_convergence.R           Monte Carlo convergence diagnostics
+│   └── python_cmd_model_calls        Reference file with example run_model.py invocations
+│
+├── data-clean/                Preprocessed data (see Data section below)
+├── modelling-results/         Simulation output (generated by run_model.py)
+└── results/                   Figures and tables (generated by analysis scripts)
+```
+
+## Data
+
+### Shared in this repository
+
+The following preprocessed data files are included in `data-clean/`:
+
+| Directory | Contents |
+|-----------|----------|
+| `building/` | Building grid geometry: cell size, binary mask, valid positions, height, volume (`.npy` files) |
+| `environmental/` | CO2/temperature/humidity measurements and daily air exchange rate estimates |
+| `assumptions/` | 1,000 Monte Carlo draws of quanta generation and removal rates |
+| `tracking/linked/` | Linked person movement tracks (52 dates) |
+| `tracking/linked-tb/` | TB-relevant linked tracks (52 dates) |
+| `tracking/linked-clinical/` | Track-to-TB-case-ID linkage tables (52 dates) |
+| `mapping_dates_interventions.csv` | Date-to-study-phase mapping |
+
+### Clinical data (not shared)
+
+Individual-level clinical data (`data-clean/clinical/tb_cases.csv`) is not shared due to patient privacy. This affects the following scripts, which cannot be re-run from scratch:
+
+- `preprocessing/prep_clinical_data.py`
+- `preprocessing/link_clinical_tracking.py`
+- `modelling/modelling_assumptions.r`
+- `analysis/clinical.Rmd`
+
+However, all outputs produced by these scripts (linked-clinical tracking tables, modelling assumptions) are included in the repository, so the full modelling and analysis pipeline can still be reproduced.
+
+### Raw tracking data (available on OSF)
+
+The raw Xovis tracking data (converted from JSON to CSV format) for all 52 study days is available on OSF:
+
+> [https://doi.org/10.17605/OSF.IO/P3W24](https://doi.org/10.17605/OSF.IO/P3W24)
+
+Download the CSV files and place them in `data-clean/tracking/unlinked/`.
+
+## Reproducing the results
+
+### Quick start (using pre-computed data in the repository)
+
+Most intermediate data files are already included. To run the simulations and analysis:
+
+```bash
+# 1. Generate position inputs for the model
+python preprocessing/get_tracking_positions.py
+
+# 2. Run the main simulation (100 Monte Carlo draws across all dates)
+cd modelling
+python run_model.py --name "uncertain_all_equal_infectious" --date "all" --sim "(1,100)"
+
+# 3. Run sensitivity scenarios
+python run_model.py --name "uncertain_confirmed_more_infectious" --date "all" --sim "(1,100)" --quanta_mult "(1.0, 8.0, 1.0)"
+python run_model.py --name "uncertain_hiv_more_infectious" --date "all" --sim "(1,100)" --quanta_mult "(0.67, 1.0, 1.0)"
+python run_model.py --name "uncertain_all_infectious" --date "all" --sim "(1,100)" --all_infectious
+cd ..
+
+# 4. Run analysis (in R)
+Rscript -e 'rmarkdown::render("analysis/tracking.Rmd")'
+Rscript -e 'rmarkdown::render("analysis/environmental.Rmd")'
+Rscript -e 'rmarkdown::render("analysis/modelling.Rmd")'
+```
+
+### Full pipeline (from OSF tracking data)
+
+To reproduce the complete pipeline starting from the raw tracking CSVs on OSF:
+
+**Step 1: Download and place data**
+
+Download the tracking CSVs from [OSF](https://doi.org/10.17605/OSF.IO/P3W24) and place them in `data-clean/tracking/unlinked/`.
+
+**Step 2: Preprocess tracking data**
+
+```bash
+# Filter tracks and annotate spatial zones
+python preprocessing/prep_tracking_data.py
+
+# Link interrupted person movements across time gaps
+python preprocessing/link_tracking_interrupted_tracks.py
+```
+
+**Step 3: Compute spatial density and occupancy metrics**
+
+```bash
+# Compute per-second occupancy, Gini coefficient, and entropy
+python preprocessing/compute_tracking_spatial_density.py
+
+# Compute time-in-clinic per person
+python preprocessing/compute_tracking_duration.py
+
+# Extract person demographic features
+python preprocessing/get_tracking_person_features.py
+
+# Compute spatial density grid for heatmap visualisation
+python preprocessing/compute_tracking_spatial_counts.py
+```
+
+**Step 4: Compute air exchange rates**
+
+Note: this step requires the environmental sensor data, which is already included in `data-clean/environmental/co2-temp-humidity.csv`. The AER output (`air-exchange-rate.csv`) is also already included.
+
+```bash
+python preprocessing/compute_environmental_aer.py
+```
+
+**Step 5: Generate position inputs for the model**
+
+```bash
+python preprocessing/get_tracking_positions.py
+```
+
+**Step 6: Run simulations**
+
+```bash
+cd modelling
+python run_model.py --name "uncertain_all_equal_infectious" --date "all" --sim "(1,100)"
+python run_model.py --name "uncertain_confirmed_more_infectious" --date "all" --sim "(1,100)" --quanta_mult "(1.0, 8.0, 1.0)"
+python run_model.py --name "uncertain_hiv_more_infectious" --date "all" --sim "(1,100)" --quanta_mult "(0.67, 1.0, 1.0)"
+python run_model.py --name "uncertain_all_infectious" --date "all" --sim "(1,100)" --all_infectious
+cd ..
+```
+
+**Step 7: Run analysis**
+
+```bash
+Rscript -e 'rmarkdown::render("analysis/tracking.Rmd")'
+Rscript -e 'rmarkdown::render("analysis/environmental.Rmd")'
+Rscript -e 'rmarkdown::render("analysis/modelling.Rmd")'
+```
+
+## Citation
+
+If you use this code or data, please cite the accompanying paper:
+
+> Banholzer et al. "Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital: a modelling study based on person movements, environmental and clinical data." *PLOS Medicine* (2025).
+
+## License
+
+This project is licensed under the MIT License.
