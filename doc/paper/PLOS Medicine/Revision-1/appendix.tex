@@ -65,12 +65,12 @@
 \section{Supplementary Information}\label{supplementary-information}
 
 % Added in revision (R2.21): overview paragraph
-This supplementary material provides methodological details and additional results for the main manuscript. The material is organised as follows. \textbf{Text A} describes the processing of person-movement tracking data, including the algorithm used to rejoin interrupted person tracks and the R Shiny application used to identify and manually link movements of TB patients. \textbf{Text B} describes the computation of air exchange rates from indoor CO\textsubscript{2} measurements using two complementary approaches: a transient mass balance model and a steady-state model. \textbf{Text C} presents the spatiotemporal Wells-Riley model used to estimate airborne \emph{Mtb} transmission risk, including the modelling assumptions, outcome measures, and the approach to estimate the effects of the interventions on spatial clustering and transmission. The \textbf{Supplementary results} section contains bioaerosol sampling results (Table~\ref{tab:S2}), a sensitivity analysis for spatial clustering measures using alternative kernel methods and metrics (Table~\ref{tab:S3}), and supplementary figures showing descriptive and modelled data (Figures~\ref{fig:S3}--\ref{fig:S11}).
+This supplementary material provides methodological details and additional results for the main manuscript. The material is organised as follows. \textbf{Text A} describes the processing of person-movement tracking data, including the algorithm used to rejoin interrupted person tracks and the R Shiny application used to identify and manually link movements of TB patients. \textbf{Text B} describes the computation of air exchange rates from indoor CO\textsubscript{2} measurements using two complementary approaches: a transient mass balance model and a steady-state model. \textbf{Text C} presents the spatiotemporal Wells-Riley model used to estimate airborne \emph{Mtb} transmission risk, including the modelling assumptions, outcome measures, and the approach to estimate the effects of the interventions on \emph{Mtb} transmission. \textbf{Supplementary results} are provided in Tables~\ref{tab:S1}--\ref{tab:S2} and Figures~\ref{fig:S3}--\ref{fig:S11}.
 
 \section{TEXT A: Processing of person movements}\label{text-a}
 
 % Added in revision (R2.21): overview of the approach
-\added{Optical sensors recorded anonymous person movements at 1-second intervals, producing time-stamped trajectories with position coordinates and unique person identifiers. However, raw tracking data contained interruptions---caused by temporary occlusion, sensor handoff, or movement outside the monitored area---that could fragment a single individual's visit into multiple short tracks. Furthermore, the tracking system did not identify which movements belonged to TB patients. Two post-processing steps were therefore required before the data could be used for transmission modelling: (1) automatically rejoining interrupted person tracks to better approximate continuous presence and exposure duration, and (2) manually identifying and linking the movements of TB patients using clinical records and an interactive R Shiny application. These steps are described in detail below.}
+\added{Optical sensors recorded anonymous person movements at 1-second intervals, producing time-stamped trajectories with position coordinates and unique track identifiers. However, raw tracking data contained interruptions that could fragment a single individual's visit into multiple short tracks. Furthermore, the tracking system did not identify which movements belonged to TB patients. Two post-processing steps were therefore required before the data could be used for transmission modelling: (1) automatically rejoining interrupted person tracks to better approximate continuous presence and exposure duration, and (2) manually identifying TB patients who were screened in a small, designated area and and linking their potentially interrupted movements with an interactive R Shiny application. These steps are described in detail below.}
 
 \subsection{Rejoining interrupted person movements}\label{rejoining-interrupted-person-movements}
 
@@ -91,7 +91,7 @@ The line chart in the bottom of the right panel showed the timepoints for ``sure
 We note that only the estimation of the absolute number of \emph{Mtb} infections in the clinic depended on accurate identification of TB patient tracks. In contrast, the effects of operational interventions on transmission were assessed in relative terms and therefore did not depend on the total person-time of TB patient movements (see Appendix C). Only a systematic misclassification of TB patient movements could meaningfully bias the relative effects. However, this is unlikely, as the dataset contained a large number of clear and uninterrupted TB patient movements, which served as reliable templates for identifying and linking additional, partially interrupted movements.
 
 \begin{figure}[H]
-%\includegraphics[width=6.30208in,height=5.30848in]{../../../ShinyApp_Screenshot.png}
+\includegraphics[width=6.30208in,height=5.30848in]{../../../ShinyAppScreenshot.png}
 \caption{\textbf{Screenshot of the R Shiny App to identify TB patient movements.} The left panel shows a summary of the data, the currently selected movement, modifiable parameters for choosing links, an option to assign movements to new containers for candidates of TB patient movements (``maybe'', ``possible'', ``likely'', ``sure'', ``sputum''), and an option to modify the order in which the final selection of TB patient movements was matched with the clinical records. The top of the right panel shows the floor plan of the clinic with the currently selected movement in black and possible links in colours. The table below shows the height difference, time difference and distance to each link. The line chart at the bottom shows the order in which ``sure'' TB patient movements appeared in the area marked in red on the floor plan. The blue area shows where TB vitals were collected, the yellow area where symptoms were screened, and the red area is approximately the location TB patients were sitting (one at a time) while their symptoms and characteristics were recorded. Note that the floor plan of the waiting area and the line chart of TB patient movements are trimmed on the right side. What is not shown is that the currently selected movement extends to the bottom-right part of the clinic, where sputum samples were collected.}
 \label{fig:S1}
 \end{figure}
@@ -143,7 +143,7 @@ Additionally, we estimated the AER using a steady state model. Under steady stat
 
 where n\textsubscript{max} is the daily maximum number of people in the clinic's waiting area (peak occupancy) and CO\textsubscript{max} is the daily maximum indoor CO\textsubscript{2} level (peak concentration). \added{\(CO_{out}\) was taken to be the daily minimum indoor CO\textsubscript{2} level, which was reached during the night when the clinic was barely occupied.} 
 
-\added{We compared the AERs between the steady state and transient mass balance model in Figure \ref{fig:S4}. The median AER from the transient mass balance model was 8\,h\textsuperscript{-1} (interquartile range [IQR] 6.2 to 10.8) compared to 6.2\,h\textsuperscript{-1} (IQR 5.7 to 7.6) for the steady state model. Conversely, the outdoor CO\textsubscript{2} level estimated by the transient mass balance model was 333\,ppm (IQR 302 to 348), which was lower than the minimum indoor CO\textsubscript{2} level of 362\,ppm (IQR 353 to 372) used in the steady state model, although the two values were highly correlated (Pearson's $r$ 0.59, p$<$0.0001).}  
+\added{We compared the AERs between the steady state and transient mass balance model in Figure \ref{fig:S4}. The median AER from the transient mass balance model was 8\,h\textsuperscript{-1} (interquartile range [IQR] 6.2 to 10.8) compared to 6.2\,h\textsuperscript{-1} (IQR 5.7 to 7.6) for the steady state model. Conversely, the outdoor CO\textsubscript{2} level estimated by the transient mass balance model was 333\,ppm (IQR 302 to 348), which was lower than the minimum indoor CO\textsubscript{2} level of 362\,ppm (IQR 353 to 372) used in the steady state model, but the two values were highly correlated (Pearson's $r$ 0.59, p$<$0.0001).}  
 
 \section{TEXT C: Modelling airborne transmission risk and estimating the effects of interventions}\label{text-c}
 
@@ -226,7 +226,7 @@ Finally, we estimated how many \emph{Mtb} infections may have been prevented by 
 % Removed in revision (R2.24): Table S2 linelist removed to protect patient privacy
 % See response to R2.24 for details
 %\captionof{table}{Linelist data of TB patients. TB status was confirmed if patients by a positive Xpert MTB or chest X-ray examination, otherwise they remained presumptive. Six patients were already on anti-TB treatment. Note that HIV status was self-reported and was not confirmed through diagnosis.}
-%\label{tab:S2}
+%\label{tab:S1}
 %
 %{\small
 %\begin{longtable}[]{@{}
@@ -977,18 +977,15 @@ Finally, we estimated how many \emph{Mtb} infections may have been prevented by 
 %}
 
 
-\captionof{table}{\textbf{Study days when \emph{Mtb} was detected in the air of the clinic waiting hall.} Bioaerosol samples were filtered and analysed with GeneXpert Ultra MTB/RIF assays. Shown are the test results with the cycle threshold (Ct) value. Note that the first positive sample was collected before modelling.}
-\label{tab:S2}
-
-{\small
-\begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4716}}
-  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1950}}@{}}
-\toprule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
+\begin{table}[H]
+\caption{\textbf{Study days when \emph{Mtb} was detected in the air of the clinic waiting hall.} Bioaerosol samples were filtered and analysed with GeneXpert Ultra MTB/RIF assays. Shown are the test results with the cycle threshold (Ct) value. Note that the first positive sample was collected before modelling.}
+\label{tab:S1}
+\small
+\begin{tabular}{@{}
+  >{\raggedright\arraybackslash}p{0.25\textwidth}
+  >{\raggedright\arraybackslash}p{0.45\textwidth}
+  >{\raggedright\arraybackslash}p{0.15\textwidth}@{}}
+\toprule
 \textbf{Date} & \textbf{Gene Xpert Ultra test result} & \textbf{Ct value} \\ \midrule
 13 June & \begin{minipage}[t]{\linewidth}\raggedright
 MTB Trace DETECTED;\\
@@ -1014,8 +1011,9 @@ RIF Resistance INDETERMINATE\strut
 MTB Trace DETECTED;\\
 RIF Resistance INDETERMINATE\strut
 \end{minipage} & 28.9 \\
-\end{longtable}
-}
+\bottomrule
+\end{tabular}
+\end{table}
 
 \clearpage
 
@@ -1023,7 +1021,7 @@ RIF Resistance INDETERMINATE\strut
 \begin{table}[ht]
 \centering
 \caption{\textbf{Sensitivity analysis for spatial clustering measures.} Median (interquartile range) by study phase and estimated median changes (95\%-credible interval, in \%) during the first and second intervention, using two kernel methods (Gaussian, exponential) and two measures (Gini coefficient, Shannon entropy). A decrease in the Gini coefficient and an increase in Shannon entropy indicate that the spatial distribution of clinic attendees was more uniform, i.e. the attendees were less spatially clustered in the clinic.}
-\label{tab:S3}
+\label{tab:S2}
 \small
 \begin{tabular}{l ccc}
 \toprule
@@ -1085,7 +1083,7 @@ Exponential kernel + Entropy &  & 1.34 (0.49, 2.21) & 0.71 (-0.09, 1.51) \\
 
 \begin{figure}[H]
 \includegraphics[width=5.90551in,height=4.43056in]{../../../../results/modelling_risk_by_infectiousness_assumptions.png}
-\caption{\textbf{Sensitivity analysis for \emph{Mtb} transmission risk under varying assumptions about infectiousness of different patient subgroups.} Boxplot of the modelled expected number of \emph{Mtb} infections in the main analysis, which assumed \added{that a random subset of people with presumptive TB were infectious and that} people with presumptive and confirmed TB were equally infectious, compared with three scenarios: (1) people with confirmed TB were eight times more infectious than those with presumptive TB, (2) people with HIV co-infection were six times more infectious than people with only presumptive or confirmed TB, and (3) all confirmed and presumptive TB patients were considered infectious---reflecting the observed TB prevalence of 0.40\% among attendees, close to the community-based estimates from Zambia \cite{klinkenberg2023PLoSMed}. Medians as lines, interquartile ranges as coloured boxes, 1.5 x IQR as whiskers, individual study days as dots.}
+\caption{\textbf{Sensitivity analysis for \emph{Mtb} transmission risk under varying assumptions about infectiousness of different patient subgroups.} Boxplot of the modelled expected number of \emph{Mtb} infections in the main analysis, which assumed \added{that a random subset of people with presumptive TB were infectious and that} people with presumptive and confirmed TB were equally infectious, compared with three scenarios: (1) people with confirmed TB were eight times more infectious than those with presumptive TB \cite{escombe2008PLOSMed}, (2) people with HIV co-infection were 33\% less infectious than people with only presumptive or confirmed TB \cite{martinez2021ClinInfectDis}, and (3) all confirmed and presumptive TB patients were considered infectious---reflecting the observed TB prevalence of 0.40\% among attendees, close to the community-based estimate from urban Zambia \cite{klinkenberg2023PLoSMed}. Medians as lines, interquartile ranges as coloured boxes, 1.5 x IQR as whiskers, individual study days as dots.}
 \label{fig:S7}
 \end{figure}
 

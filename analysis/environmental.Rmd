@@ -134,6 +134,49 @@ aer_df %>%
     upper_aer = quantile(aer_tmb, 0.75, na.rm = TRUE)
   ) %>%
   mutate_if(is.numeric, ~ round(.x, 1))
+
+# absolute ventilation rates
+aer_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  mutate(vent_rate = aer_tmb * 1178.70 / 3.6) %>%
+  summarise(across(vent_rate, .fns = list(
+    median = ~ median(.x),
+    q25 = ~ quantile(.x, .25),
+    q75 = ~ quantile(.x, .75)
+  )))
+aer_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  mutate(vent_rate = aer_tmb * 1178.70 / 3.6) %>%
+  group_by(study_phase_2) %>%
+  summarise(across(vent_rate, .fns = list(
+    median = ~ median(.x),
+    q25 = ~ quantile(.x, .25),
+    q75 = ~ quantile(.x, .75)
+  ))) %>%
+  mutate_if(is.numeric, ~ round(.x, 1))
+
+# air exchange rate steady state model
+aer_ssm_summary <- aer_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  summarise(
+    median_aer = median(aer_ssm, na.rm = TRUE),
+    low_aer = quantile(aer_ssm, 0.25, na.rm = TRUE),
+    upper_aer = quantile(aer_ssm, 0.75, na.rm = TRUE)
+  ) %>%
+  mutate_all(~ round(.x, 1))
+aer_ssm_summary
+
+# outdoor CO2 level
+co_out <- aer_df %>%
+  filter(device == "Aranet4 272D2") %>%
+  summarise(across(c(Cr_tmb, Cr_ssm), .fns = list(
+    median = ~ median(.x),
+    q25 = ~ quantile(.x, .25),
+    q75 = ~ quantile(.x, .75)
+  )))
+co_out %>%
+  gather()
+cor.test(aer_df$Cr_tmb, aer_df$Cr_ssm)
 ```
 
 

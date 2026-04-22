@@ -92,6 +92,11 @@ entries_df <- counts_df %>%
 sprintf("Number of visits: %i", sum(entries_df$n))
 
 entries_df %>%
+  left_join(interventions, by = "date") %>%
+  group_by(study_phase) %>%
+  summarise(N = sum(n))
+
+entries_df %>%
   summarise(
     median_n = median(n, na.rm = TRUE),
     low_n = quantile(n, 0.25, na.rm = TRUE),
@@ -131,6 +136,10 @@ track_times_df %>%
     upper_n = quantile(n, 0.75, na.rm = TRUE)
   ) %>%
   mutate_if(is.numeric, ~ scales::comma(round(.x, 0)))
+track_times_df %>%
+  group_by(study_phase) %>%
+  summarise(n = n()) %>%
+  mutate_if(is.numeric, ~ scales::comma(round(.x, 0)))
 
 # track duration
 track_times_df %>%
@@ -150,6 +159,47 @@ track_times_df %>%
   mutate_if(is.numeric, ~ round(.x / 60, 1))
 ```
 
+
+## Track time distribution
+
+```{r track time distribution}
+track_time_cat_df <- track_times_df %>%
+  mutate(
+    time_cat = cut(
+      duration,
+      breaks = c(0, 1, 5, 15, 30, Inf) * 60,
+      labels = c(
+        "<1 min", "1-5 min", "5-15 min",
+        "15-30 min", ">30 min"
+      ),
+      right = FALSE
+    )
+  ) %>%
+  group_by(time_cat) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  mutate(
+    prop = n / sum(n),
+    n = format(n, big.mark = ","),
+    label = paste0(n, " (", round_k(100 * prop, 0), "%)")
+  )
+
+duration_distr_pl <- ggplot(track_time_cat_df, aes(x = time_cat, y = prop)) +
+  geom_bar(stat = "identity", fill = "grey50", color = "black", alpha = .8) +
+  geom_text(aes(label = label), vjust = -0.5, size = 8 / cm(1)) +
+  scale_y_continuous(
+    name = "Proprtion of person movements (%)",
+    expand = expansion(mult = c(0, 0.1)),
+    labels = function(x) 100 * x
+  ) +
+  scale_x_discrete(name = "Duration of person movement") +
+  theme_custom()
+save_plot(
+  duration_distr_pl,
+  "results/tracking_duration_distribution.png",
+  w = 14, h = 12
+)
+```
 
 ## Occupancy over time
 
@@ -175,23 +225,30 @@ peak_annotation <- paste0(
   " (IQR ", round_k(quantile(peak_occupancy_df$peak, 0.25), 0), "-",
   round_k(quantile(peak_occupancy_df$peak, 0.75), 0), ")"
 )
+occupancy_df %>%
+  group_by(date, weekday) %>%
+  summarise(peak = max(N, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(weekday) %>%
+  summarise(mean_peak = round(mean(peak))) %>%
+  ungroup()
 
 
 occupancy_pl <- ggplot(mapping = aes(x = time)) +
   geom_ribbon(
     data = daytime_occupancy_df,
     mapping = aes(ymin = .lower, ymax = .upper),
-    alpha = .4, fill = "grey50"
+    alpha = .4, fill = "grey70"
   ) +
   geom_line(
     data = weekday_occupancy_df,
     mapping = aes(y = mid, group = weekday, color = weekday),
-    size = .2, alpha = .8
+    size = .3, alpha = .8
   ) +
   geom_line(
     data = daytime_occupancy_df,
     mapping = aes(y = mid),
-    size = .2, alpha = .8, color = "black"
+    size = .3, alpha = .8, color = "black"
   ) +
   # annotate(
   #   "text",
@@ -212,7 +269,10 @@ occupancy_pl <- ggplot(mapping = aes(x = time)) +
     expand = c(0, 0)
   ) +
   scale_color_manual(
-    values = paletteer_d("colRoz::uluru"),
+    values = c(
+      rev(paletteer_d("dichromat::DarkRedtoBlue_12"))[1:5],
+      paletteer_d("dichromat::DarkRedtoBlue_12")[c(3, 1)]
+    ),
     breaks = levels(weekday_occupancy_df$weekday),
     name = "Weekday"
   ) +
@@ -419,7 +479,7 @@ density_reduction_pl <- density_reduction_df %>%
     name = "Estimated reduction in the Gini coefficient (%)",
     limits = c(0, NA)
   ) +
-  scale_color_paletteer_d("colRoz::uluru") +
+  scale_color_paletteer_d("PrettyCols::Lively") +
   theme_custom() +
   theme(
     axis.title.y = element_blank(),
@@ -436,112 +496,204 @@ saveRDS(
 ```
 
 
-## Intervention effects on Entropy
+## Sensitivity analysis: Kernel and metric comparison
 
-```{r entropy by study phase}
-# overall density distribution
-hist(daily_density_df$entropy)
-
-# values by study phase
-daily_density_df %>%
-  group_by(study_phase) %>%
-  summarise(
-    median_entropy = median(entropy, na.rm = TRUE),
-    low_entropy = quantile(entropy, 0.25, na.rm = TRUE),
-    upper_entropy = quantile(entropy, 0.75, na.rm = TRUE)
-  ) %>%
-  ungroup()
-
-# model
-entropy_model <- brms::brm(
-  entropy ~ study_phase + weekday,
-  data = daily_density_df,
-  family = gaussian(),
-  iter = 500,
-  chains = 4,
-  cores = 1,
-  seed = 12345
+```{r sensitivity load data}
+# load sensitivity data
+sens_files <- list.files("data-clean/tracking/occupancy-sensitivity",
+  pattern = "\\.csv$", full.names = TRUE
 )
-summary(entropy_model)
-
-# parameter samples
-entropy_effects_smpls <- spread_draws(
-  entropy_model,
-  b_study_phaseFirstintervention,
-  b_study_phaseSecondintervention
-)
-
-# summarise
-entropy_effects <- entropy_effects_smpls %>%
-  pivot_longer(
-    starts_with("b_"),
-    names_to = "parameter",
-    values_to = "value"
-  ) %>%
+sens_df <- mclapply(sens_files, function(file) {
+  data.table::fread(file) %>%
+    mutate(date = as.Date(basename(file)))
+}, mc.cores = 2)
+sens_df <- do.call(rbind, sens_df) %>%
+  left_join(interventions, by = "date") %>%
   mutate(
-    study_phase = case_when(
-      parameter == "b_study_phaseFirstintervention" ~ "First intervention",
-      parameter == "b_study_phaseSecondintervention" ~ "Second intervention"
-    ),
-    study_phase = factor(
-      study_phase,
-      levels = c("First intervention", "Second intervention")
-    ),
-  ) %>%
-  group_by(study_phase) %>%
-  summarise(
-    median = median(value),
-    lower = quantile(value, 0.025),
-    upper = quantile(value, 0.975),
-    lower_80 = quantile(value, 0.1),
-    upper_80 = quantile(value, 0.9),
-    lower_50 = quantile(value, 0.25),
-    upper_50 = quantile(value, 0.75)
-  ) %>%
-  ungroup()
-
-entropy_effects %>%
-  mutate_if(is.numeric, ~ round_k(.x, 2))
-```
-
-
-## Track time distribution
-
-```{r track time distribution}
-track_time_cat_df <- track_times_df %>%
-  mutate(
-    time_cat = cut(
-      duration,
-      breaks = c(0, 1, 5, 15, 30, Inf) * 60,
-      labels = c(
-        "<1 min", "1-5 min", "5-15 min",
-        "15-30 min", ">30 min"
-      ),
-      right = FALSE
+    weekday = weekdays(date, abbreviate = TRUE),
+    weekday = factor(
+      weekday,
+      levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     )
-  ) %>%
-  group_by(time_cat) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
-  mutate(
-    prop = n / sum(n),
-    n = format(n, big.mark = ","),
-    label = paste0(n, " (", round_k(100 * prop, 0), "%)")
   )
 
-duration_distr_pl <- ggplot(track_time_cat_df, aes(x = time_cat, y = prop)) +
-  geom_bar(stat = "identity", fill = "grey50", color = "black", alpha = .8) +
-  geom_text(aes(label = label), vjust = -0.5, size = 8 / cm(1)) +
-  scale_y_continuous(
-    name = "Proprtion of person movements (%)",
-    expand = expansion(mult = c(0, 0.1)),
-    labels = function(x) 100 * x
-  ) +
-  scale_x_discrete(name = "Duration of person movement") +
-  theme_custom()
-save_plot(
-  duration_distr_pl,
-  "results/tracking_duration_distribution.png",
-  w = 14, h = 12
+# daily averages
+daily_sens_df <- sens_df %>%
+  group_by(date, weekday, study_phase) %>%
+  summarise(
+    gini_gaussian = median(gini_gaussian, na.rm = TRUE),
+    entropy_gaussian = median(entropy_gaussian, na.rm = TRUE),
+    gini_exponential = median(gini_exponential, na.rm = TRUE),
+    entropy_exponential = median(entropy_exponential, na.rm = TRUE)
+  ) %>%
+  ungroup()
+```
+
+```{r sensitivity models, results='hide'}
+# fit models for the three sensitivity metrics
+# (main analysis Gini Gaussian is already fitted above as gini_model)
+gini_exp_model <- brms::brm(
+  gini_exponential ~ study_phase + weekday,
+  data = daily_sens_df,
+  family = Beta(),
+  iter = 500, chains = 4, cores = 1, seed = 12345
 )
+
+entropy_gauss_model <- brms::brm(
+  log(entropy_gaussian) ~ study_phase + weekday,
+  data = daily_sens_df,
+  family = gaussian(),
+  iter = 500, chains = 4, cores = 1, seed = 12345
+)
+
+entropy_exp_model <- brms::brm(
+  log(entropy_exponential) ~ study_phase + weekday,
+  data = daily_sens_df,
+  family = gaussian(),
+  iter = 500, chains = 4, cores = 1, seed = 12345
+)
+```
+
+```{r sensitivity table}
+# helper: extract phase values (median + IQR) from daily data
+summarise_phase_values <- function(df, col) {
+  df %>%
+    group_by(study_phase) %>%
+    summarise(
+      median = median(.data[[col]], na.rm = TRUE),
+      q25 = quantile(.data[[col]], 0.25, na.rm = TRUE),
+      q75 = quantile(.data[[col]], 0.75, na.rm = TRUE)
+    ) %>%
+    ungroup() %>%
+    mutate(val = paste0(round_k(median, 2), " (", round_k(q25, 2), ", ", round_k(q75, 2), ")"))
+}
+
+# helper: extract intervention effects from a brms model (% reduction for Beta, raw change for Gaussian)
+summarise_effects <- function(model, family = "beta") {
+  smpls <- spread_draws(
+    model,
+    b_study_phaseFirstintervention,
+    b_study_phaseSecondintervention
+  )
+  smpls %>%
+    pivot_longer(
+      starts_with("b_"),
+      names_to = "parameter",
+      values_to = "value"
+    ) %>%
+    mutate(
+      study_phase = recode_factor(parameter, !!!c(
+        "b_study_phaseFirstintervention" = "First intervention",
+        "b_study_phaseSecondintervention" = "Second intervention"
+      )),
+      effect = 100 * (exp(value) - 1)
+    ) %>%
+    group_by(study_phase) %>%
+    summarise(
+      median = median(effect),
+      lower = quantile(effect, 0.025),
+      upper = quantile(effect, 0.975)
+    ) %>%
+    ungroup() %>%
+    mutate(val = paste0(round_k(median, 2), " (", round_k(lower, 2), ", ", round_k(upper, 2), ")"))
+}
+
+# metric configs: label, daily data source, column, model, family
+metrics <- list(
+  list(
+    label = "Gaussian kernel + Gini",
+    df = daily_density_df, col = "gini",
+    model = gini_model, family = "beta"
+  ),
+  list(
+    label = "Exponential kernel + Gini",
+    df = daily_sens_df, col = "gini_exponential",
+    model = gini_exp_model, family = "beta"
+  ),
+  list(
+    label = "Gaussian kernel + Entropy",
+    df = daily_sens_df, col = "entropy_gaussian",
+    model = entropy_gauss_model, family = "gaussian"
+  ),
+  list(
+    label = "Exponential kernel + Entropy",
+    df = daily_sens_df, col = "entropy_exponential",
+    model = entropy_exp_model, family = "gaussian"
+  )
+)
+
+phases <- c("Baseline", "First intervention", "Second intervention")
+effect_phases <- c("First intervention", "Second intervention")
+
+# build table rows
+table_rows <- lapply(metrics, function(m) {
+  vals <- summarise_phase_values(m$df, m$col)
+  effs <- summarise_effects(m$model, m$family)
+
+  # Panel A: values by phase
+  phase_vals <- setNames(
+    sapply(phases, function(p) vals$val[vals$study_phase == p]),
+    phases
+  )
+
+  # Panel B: effects (Baseline empty)
+  effect_vals <- setNames(
+    sapply(phases, function(p) {
+      if (p == "Baseline") {
+        return("")
+      }
+      effs$val[effs$study_phase == p]
+    }),
+    phases
+  )
+
+  list(label = m$label, phase_vals = phase_vals, effect_vals = effect_vals)
+})
+
+# Use generic label since we mix families
+panel_b_label <- "Estimated intervention effect (95\\% CrI)"
+
+latex_lines <- c(
+  "\\begin{table}[ht]",
+  "\\centering",
+  "\\caption{\\textbf{Sensitivity analysis for spatial clustering measures.} Median (interquartile range) by study phase and estimated median changes (95\\%-credible interval, in \\%) during the first and second intervention, using two kernel methods (Gaussian, exponential) and two measures (Gini coefficient, Shannon entropy).}",
+  "\\label{tab:S3}",
+  "\\small",
+  "\\begin{tabular}{l ccc}",
+  "\\toprule",
+  paste0(" & ", paste(phases, collapse = " & "), " \\\\"),
+  "\\midrule",
+  "\\multicolumn{4}{l}{\\textit{Panel A: Values by study phase, median (IQR)}} \\\\",
+  "[0.5ex]"
+)
+for (r in table_rows) {
+  latex_lines <- c(latex_lines, paste0(
+    r$label, " & ",
+    paste(r$phase_vals, collapse = " & "),
+    " \\\\"
+  ))
+}
+latex_lines <- c(
+  latex_lines,
+  "[1ex]",
+  "\\multicolumn{4}{l}{\\textit{Panel B: Estimated intervention effects, median (95\\% CrI, in \\%)}} \\\\",
+  "[0.5ex]"
+)
+for (r in table_rows) {
+  latex_lines <- c(latex_lines, paste0(
+    r$label, " & ",
+    paste(r$effect_vals, collapse = " & "),
+    " \\\\"
+  ))
+}
+latex_lines <- c(
+  latex_lines,
+  "\\bottomrule",
+  "\\end{tabular}",
+  "\\end{table}"
+)
+
+latex_table <- paste(latex_lines, collapse = "\n")
+cat(latex_table)
+writeLines(latex_table, "results/sensitivity_spatial_clustering_table.tex")
 ```

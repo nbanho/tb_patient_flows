@@ -62,6 +62,8 @@ def parse_args() -> argparse.Namespace:
                    help='Multipliers (HIV+, confirmed TB, presumptive TB), e.g. "(1,1,1)".')
     p.add_argument("--breath_rate", default=None,
                    help='Breathing rates (m3/h) by activity (waiting, walking), e.g. "(0.5, 1.2)".')
+    p.add_argument("--all_infectious", action="store_true", default=False,
+                   help="Treat all TB cases (confirmed + presumptive) as infectious.")
     p.add_argument("--cores", type=int, default=4,
                    help="Number of worker processes for parallel runs.")
     return p.parse_args()
@@ -198,6 +200,12 @@ def prepare_date_inputs(
     qgen_date_df = qgen_df[qgen_df["date"] == date_str].copy()
     if qgen_date_df.empty:
         raise ValueError(f"No quanta_generation rows for date {date_str}")
+
+    # Zero out rates for non-infectious cases (unless --all_infectious)
+    if not args.all_infectious:
+        non_inf = qgen_date_df["infectious"] == 0
+        qgen_date_df.loc[non_inf, "waiting_rate"] = 0.0
+        qgen_date_df.loc[non_inf, "walking_rate"] = 0.0
 
     # Override waiting/walking for infectious==1 OR convert to per-second
     if args.quanta_rate is not None:
@@ -359,7 +367,7 @@ def run_single_sim(sim_num: int, run_name: str, shared: Dict[str, object], din: 
     risk_df = pd.DataFrame(rows)
     out_csv = os.path.join(results_dir, f"risk_results_sim_{sim_num}.csv")
     risk_df.to_csv(out_csv, index=False)
-    print(f"[{date_str}] sim {sim_num} -> {out_csv}")
+    print(f"[{date_str}] sim {sim_num} -> {out_csv}", flush=True)
 
 
 # =============================================================================
@@ -368,15 +376,25 @@ def run_single_sim(sim_num: int, run_name: str, shared: Dict[str, object], din: 
 
 def date_worker(date_str: str, args: argparse.Namespace, shared: Dict[str, object], sim_range: Tuple[int, int]) -> None:
     """Run all missing simulations for one date (sequential within a date)."""
-    din = prepare_date_inputs(date_str, args, shared)
-    out_dir = os.path.join(RESULTS_ROOT, args.name, date_str)
-    missing = missing_simulations(out_dir, sim_range)
-    for sim_num in missing:
-        run_single_sim(sim_num, args.name, shared, din)
+    import traceback
+    try:
+        din = prepare_date_inputs(date_str, args, shared)
+        out_dir = os.path.join(RESULTS_ROOT, args.name, date_str)
+        missing = missing_simulations(out_dir, sim_range)
+        for sim_num in missing:
+            run_single_sim(sim_num, args.name, shared, din)
+    except Exception:
+        traceback.print_exc()
+        raise
 
 def sim_worker(sim_num: int, run_name: str, shared: Dict[str, object], din: Dict[str, object]) -> None:
     """Wrapper to run one simulation (top-level for pickling in ProcessPool)."""
-    run_single_sim(sim_num, run_name, shared, din)
+    import traceback
+    try:
+        run_single_sim(sim_num, run_name, shared, din)
+    except Exception:
+        traceback.print_exc()
+        raise
 
 def run_single_date(args: argparse.Namespace, shared: Dict[str, object], date_str: str, sim_range: Tuple[int, int]) -> None:
     """Parallelize simulations for one date."""
@@ -420,6 +438,11 @@ if __name__ == "__main__":
     SHARED = load_shared_data()
 
     if args.date == "all":
-        run_all_dates(args, SHARED, sim_range)
+        dates = list_available_dates()
+        if not dates:
+            print(f"ERROR: No CSV files found in {PATH_LINKED_TB}. Check if files need to be downloaded from iCloud.", flush=True)
+        else:
+            print(f"Found {len(dates)} dates to process.", flush=True)
+            run_all_dates(args, SHARED, sim_range)
     else:
         run_single_date(args, SHARED, args.date, sim_range)

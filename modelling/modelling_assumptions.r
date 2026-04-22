@@ -54,11 +54,7 @@ quanta_rates <- quanta_rates %>%
   left_join(prob_infectious, by = "sample") %>%
   group_by(sample) %>%
   mutate(infectious = if_else(tb == 1, 1, rbinom(n(), 1, prob))) %>%
-  ungroup() %>%
-  mutate(
-    waiting_rate = waiting_rate * infectious,
-    walking_rate = walking_rate * infectious
-  )
+  ungroup()
 
 # save quanta generation rates per track id
 write.csv(

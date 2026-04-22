@@ -221,7 +221,7 @@ risk_time_pl <- ggplot(
     limits = c(0, NA)
   ) +
   scale_colour_manual(
-    values = paletteer_d("colRoz::uluru"),
+    values = paletteer_d("PrettyCols::Lively"),
     name = "Study phase",
     labels = c(
       "Baseline",
@@ -230,7 +230,7 @@ risk_time_pl <- ggplot(
     )
   ) +
   scale_fill_manual(
-    values = paletteer_d("colRoz::uluru"),
+    values = paletteer_d("PrettyCols::Lively"),
     name = "Study phase",
     labels = c(
       "Baseline",
@@ -417,7 +417,7 @@ rate_diff_pl <- ggplot(daily_risk_df,
     name = "Person-time adjusted rate ratio (NUM/UM model, h⁻¹)",
   ) +
   scale_colour_manual(
-    values = paletteer_d("colRoz::uluru"),
+    values = paletteer_d("PrettyCols::Lively"),
     name = "Study phase",
     labels = c(
       "Baseline",
@@ -532,7 +532,7 @@ reduction_pl <- estimated_reduction_df %>%
     name = "Estimated reduction in the expected number of Mtb infections (%)",
     limits = c(0, NA)
   ) +
-  scale_color_paletteer_d("colRoz::uluru") +
+  scale_color_paletteer_d("PrettyCols::Lively") +
   theme_custom() +
   theme(
     axis.title.y = element_blank(),
@@ -624,127 +624,6 @@ prev_inf_df_summary %>%
   mutate_if(is.numeric, ~ round_k(.x, 0))
 ```
 
-```{r plot prevented infections}
-# plot
-prevented_infections_pl <- prev_inf_df_summary %>%
-  ggplot(aes(x = study_phase, y = median, fill = study_phase)) +
-  geom_bar(stat = "identity") +
-  geom_errorbar(
-    aes(ymin = lower, ymax = upper),
-    width = 0.2,
-    color = "black",
-    size = 1
-  ) +
-  scale_fill_manual(
-    values = c(paletteer_d("colRoz::uluru")[2:3], "brown"),
-    name = "Study phase"
-  ) +
-  scale_y_continuous(
-    name = "Estimated expected number of Mtb infections prevented",
-    expand = expansion(mult = c(0, 0.01))
-  ) +
-  theme_custom() +
-  theme(
-    axis.title.x = element_blank(),
-    plot.title.position = "plot"
-  )
-
-save_plot(
-  prevented_infections_pl,
-  "results/modelling_prevented_infections.png",
-  w = 12, h = 8
-)
-```
-
-
-## Association with spatial density
-
-```{r add spatial density measures}
-# load spatial density data
-files_occupancy <- list.files("data-clean/tracking/occupancy",
-  pattern = "\\.csv$", full.names = TRUE
-)
-occupancy_df <- mclapply(files_occupancy, function(file) {
-  data.table::fread(file) %>%
-    mutate(date = as.Date(basename(file)))
-}, mc.cores = 2)
-occupancy_df <- do.call(rbind, occupancy_df)
-
-# aggregate daily
-daily_density_df <- occupancy_df %>%
-  group_by(date) %>%
-  summarise(
-    gini = median(gini_kde, na.rm = TRUE),
-    entropy = median(entropy_kde, na.rm = TRUE)
-  ) %>%
-  ungroup()
-
-# standardise measures
-daily_density_df <- daily_density_df %>%
-  mutate(
-    gini_z = scale(gini),
-    entropy_z = scale(entropy)
-  )
-
-# add to infection risk data
-daily_risk_df <- daily_risk_df %>%
-  left_join(daily_density_df, by = "date")
-```
-
-```{r association spatial density gini}
-# model gini
-risk_gini_model <- brm_multiple(
-  log1p(infections_diffusion) ~ offset(log1p(infections_mixed)) +
-    offset(log(duration))
-    + gini_z + weekday,
-  data = split(daily_risk_df, daily_risk_df$sim),
-  family = gaussian(),
-  chains = 4,
-  cores = 1,
-  iter = 500,
-  seed = 12345,
-  backend = "cmdstanr",
-  silent = 2,
-  recompile = FALSE
-)
-summary(risk_gini_model)
-
-# estimated effect
-spread_draws(
-  risk_gini_model,
-  b_gini_z,
-  ndraws = 1000
-) %>%
-  median_qi(b_gini_z) %>%
-  mutate_if(is.numeric, ~ round_k(.x, 2))
-```
-
-```{r association spatial density entropy}
-# model entropy
-risk_entropy_model <- brm_multiple(
-  log1p(infections_diffusion) ~ offset(log1p(infections_mixed)) +
-    offset(log(duration)) + entropy_z + weekday,
-  data = split(daily_risk_df, daily_risk_df$sim),
-  family = gaussian(),
-  chains = 4,
-  cores = 1,
-  iter = 500,
-  seed = 12345,
-  backend = "cmdstanr",
-  silent = 2,
-  recompile = FALSE
-)
-summary(risk_entropy_model)
-
-spread_draws(
-  risk_entropy_model,
-  b_entropy_z,
-  ndraws = 1000
-) %>%
-  median_qi(b_entropy_z) %>%
-  mutate_if(is.numeric, ~ round_k(.x, 2))
-```
-
 
 ## Sensitivity analyses: infectious assumptions
 
@@ -756,6 +635,10 @@ conf_more_infectious_files <- list.files(
 )
 hiv_more_infectious_files <- list.files(
   "modelling-results/uncertain_hiv_more_infectious/",
+  pattern = "\\.csv$", full.names = TRUE, recursive = TRUE
+)
+all_infectious_files <- list.files(
+  "modelling-results/uncertain_all_infectious/",
   pattern = "\\.csv$", full.names = TRUE, recursive = TRUE
 )
 
@@ -781,6 +664,10 @@ hiv_more_infectious_df <- map_dfr(
   hiv_more_infectious_files,
   read_number_of_infections
 )
+all_infectious_df <- map_dfr(
+  all_infectious_files,
+  read_number_of_infections
+)
 
 # combine
 uncertain_df <- bind_rows(
@@ -801,6 +688,11 @@ uncertain_df <- bind_rows(
     mutate(
       assumption =
         "**Scenario 2**<br>HIV-positive more infectious"
+    ),
+  all_infectious_df %>%
+    mutate(
+      assumption =
+        "**Scenario 3**<br>All presumptive infectious"
     )
 ) %>%
   mutate(assumption = factor(assumption, levels = (unique(assumption)))) %>%
@@ -849,7 +741,7 @@ sensitivity_pl <- uncertain_df %>%
 save_plot(
   sensitivity_pl,
   "results/modelling_risk_by_infectiousness_assumptions.png",
-  w = 16, h = 12
+  w = 17, h = 12
 )
 ```
 
