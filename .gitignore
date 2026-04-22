@@ -7,11 +7,11 @@ data-clean/tracking/non-tb-positions/
 data-clean/tracking/tb-positions/
 results/
 modelling-results/
-data-clean/building/
-data-clean/assumptions/
 __pycache__/
 
 *_old/
 **/*_old/
 data-clean/tracking/spatial-density.h5
+data-clean/tracking/linkage-assignment.csv
+data-clean/tracking/time-in-clinic.csv
 data-clean/clinical/tb_cases.csv
