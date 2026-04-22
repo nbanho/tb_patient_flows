@@ -25,6 +25,7 @@ env_data_co2_pl <- readRDS("results/environmental_co2_over_time.rds") +
 data_pl <- clinical_data_pl + track_data_pl + env_data_co2_pl +
   plot_layout(ncol = 1, heights = c(5, 9.5, 7.5))
 save_plot(data_pl, "results/modelled_data.png", w = 16, h = 22)
+save_plot(data_pl, "results/main-figures/figure_3.tif", w = 16, h = 22, dpi = 300)
 
 # modelling effects
 effects_density_pl <- readRDS("results/modelling_estimated_reduction_in_spatial_density.rds") +
@@ -34,3 +35,4 @@ effects_infections_pl <- readRDS("results/modelling_estimated_reduction_in_infec
 effects_pl <- effects_density_pl + effects_infections_pl +
   plot_layout(ncol = 1, heights = c(7.5, 7.5))
 save_plot(effects_pl, "results/modelled_effects.png", w = 16, h = 15)
+save_plot(effects_pl, "results/main-figures/figure_5.tif", w = 16, h = 15, dpi = 300)
