@@ -3,6 +3,24 @@ title: "Clinical TB data"
 output: html_document
 ---
 
+<!--
+Descriptive analysis of clinical TB data collected during the study.
+
+Reads from:
+  - data-clean/clinical/tb_cases.csv           (preprocessed TB case data)
+  - data-raw/clinical/complete-clinic-data...   (full questionnaire for linelist)
+  - data-clean/mapping_dates_interventions.csv  (study phase timeline)
+
+Outputs:
+  - results/clinical_tb_cases_over_time.rds     (plot: daily TB case counts)
+
+Sections:
+  1. Load data — read clinical records and merge with study phase classifications
+  2. Linelist data — formatted table of individual TB patient characteristics
+  3. Descriptive summaries — counts and demographics by study phase
+  4. TB cases over time — daily counts of confirmed and presumptive TB cases
+-->
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 this_file <- knitr::current_input(dir = TRUE)

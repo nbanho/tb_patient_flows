@@ -3,6 +3,47 @@ title: "TB Patient Flows Modelling"
 output: html_document
 ---
 
+<!--
+Analysis of TB transmission modelling results from Monte Carlo simulations.
+
+The model estimates Mtb infection risk using a spatiotemporal diffusion model
+(non-uniform mixed, NUM) which accounts for proximity between infectious and
+susceptible individuals, and compares it to a uniform well-mixed model (UM)
+that assumes equal exposure everywhere.
+
+Infection probability follows the Wells-Riley equation: P = 1 - exp(-Q),
+where Q is the cumulative inhaled quanta dose.
+
+Intervention effects are estimated using Bayesian regression (brm_multiple)
+fitted across all Monte Carlo simulation draws to propagate parameter
+uncertainty.
+
+Reads from:
+  - data-clean/tracking/person-features.csv                          (demographics)
+  - modelling-results/uncertain_all_equal_infectious/                (main analysis)
+  - modelling-results/uncertain_confirmed_more_infectious/           (scenario 1)
+  - modelling-results/uncertain_hiv_more_infectious/                 (scenario 2)
+  - modelling-results/uncertain_all_infectious/                      (scenario 3)
+  - data-clean/mapping_dates_interventions.csv                        (study phases)
+
+Outputs:
+  - results/modelling_risk_per_day.png                                (daily infections)
+  - results/modelling_risk_overall.png                                (NUM vs UM comparison)
+  - results/modelling_adjusted_rate_ratio_per_day.png                 (rate ratios)
+  - results/modelling_estimated_reduction_in_infections.rds           (intervention effects)
+  - results/modelling_risk_by_infectiousness_assumptions.png          (sensitivity)
+  - results/modelling_hourly_risk_by_group.png                        (stratified risk)
+
+Sections:
+  1. Risk of infection — load results, compute daily expected infections
+  2. Total risk by model — compare NUM (with proximity) vs UM (without)
+  3. Person-time adjusted rate ratio — isolate proximity contribution per day
+  4. Estimated reduction in infections — Bayesian regression of intervention effects
+  5. Estimated prevented infections — counterfactual prediction
+  6. Sensitivity analyses — alternative infectiousness assumptions (3 scenarios)
+  7. Stratification — infection rate by gender and healthcare worker status
+-->
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 

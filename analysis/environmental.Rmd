@@ -3,6 +3,33 @@ title: "Environmental data"
 output: html_document
 ---
 
+<!--
+Descriptive analysis of environmental monitoring data: CO2 concentrations,
+temperature, humidity, and air exchange rates (AER) in the hospital waiting area.
+
+Two Aranet4 CO2 monitors were deployed (devices 272D2 and 25247). AER is
+estimated from CO2 decay using two methods:
+  - Transient mass balance (TMB): fits a dynamic CO2 model
+  - Steady-state model (SSM): assumes equilibrium CO2 concentration
+
+Reads from:
+  - data-clean/environmental/co2-temp-humidity.csv  (5-min interval sensor data)
+  - data-clean/environmental/air-exchange-rate.csv   (daily AER estimates)
+  - data-clean/mapping_dates_interventions.csv       (study phase timeline)
+
+Outputs:
+  - results/environmental_co2_over_time.rds                  (plot: diurnal CO2)
+  - results/environmental_co2_over_time_by_device.png        (plot: sensor comparison)
+  - results/environmental_ventilation_model_comparison.png   (plot: TMB vs SSM)
+
+Sections:
+  1. Load data — read sensor measurements and AER, merge with study phases
+  2. Descriptive summaries — CO2, temperature, humidity, and AER statistics
+  3. CO2 over time — diurnal CO2 concentration profiles
+  4. Correlation between CO2 measurements — compare the two Aranet4 monitors
+  5. Air exchange rate by model — compare TMB vs SSM ventilation estimates
+-->
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 

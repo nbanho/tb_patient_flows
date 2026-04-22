@@ -3,6 +3,44 @@ title: "Person tracking data"
 output: html_document
 ---
 
+<!--
+Analysis of person movement tracking data, spatial clustering, and the effects
+of interventions on crowding patterns in the hospital waiting area.
+
+Spatial clustering is measured by the Gini coefficient (gini_kde) computed via
+Gaussian kernel density estimation on the building grid:
+  - 0 = perfectly uniform distribution of people
+  - approaching 1 = all people concentrated in one location
+
+Intervention effects on the Gini coefficient are estimated using Bayesian Beta
+regression (appropriate because Gini is bounded in (0,1)), adjusting for
+weekday effects.
+
+Reads from:
+  - data-clean/tracking/occupancy/{date}.csv              (per-second occupancy and Gini)
+  - data-clean/tracking/counts/counts.csv                 (entry counts)
+  - data-clean/tracking/time-in-clinic.csv                (person movement durations)
+  - data-clean/tracking/occupancy-sensitivity/{date}.csv  (alternative kernel/metric results)
+  - data-clean/mapping_dates_interventions.csv             (study phase timeline)
+
+Outputs:
+  - results/tracking_duration_distribution.png                   (histogram of durations)
+  - results/tracking_occupancy_over_time.rds                     (plot: diurnal occupancy)
+  - results/tracking_density_over_time.png                       (plot: occupancy + Gini)
+  - results/tracking_gini_effects_samples.rds                    (posterior samples)
+  - results/modelling_estimated_reduction_in_spatial_density.rds  (plot: intervention effects)
+  - results/sensitivity_spatial_clustering_table.tex              (LaTeX: sensitivity table)
+
+Sections:
+  1. Load data — read occupancy, counts, and duration data; merge with study phases
+  2. Descriptive summaries — daily visits, movement counts, and track durations
+  3. Track time distribution — histogram of movement duration categories
+  4. Occupancy over time — diurnal occupancy profiles by weekday
+  5. Density over time — diurnal Gini coefficient profiles
+  6. Intervention effects on the Gini coefficient — Bayesian Beta regression
+  7. Sensitivity analysis — Gaussian vs exponential kernel, Gini vs Shannon entropy
+-->
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
