@@ -1,4 +1,4 @@
-# Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital
+# Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital: a modelling study based on person movements, environmental and clinical data
 
 Code and data accompanying the paper *"Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital: a modelling study based on person movements, environmental and clinical data"* by Nicolas Banholzer, Guy Muula, Fiona Mureithi, Esau Banda, Pascal Bittel, Lavinia Furrer, David Kronthaler, Remo Schmutz, Matthias Egger, Carolyn Bolton, and Lukas Fenner.
 
@@ -93,6 +93,18 @@ tb_patient_flows/
 
 ## Data
 
+### Tracking data (download from OSF)
+
+The processed person-tracking data for all 52 study days is available on OSF:
+
+> **[https://doi.org/10.17605/OSF.IO/P3W24](https://doi.org/10.17605/OSF.IO/P3W24)**
+
+Download the CSV files and place them in **`data-clean/tracking/unlinked/`**.
+
+This data is not the raw sensor output. It was derived from the original Xovis JSON exports by converting to CSV format (`preprocessing/read_tracking_flows.py`), filtering to study days and daytime hours (6 AM–6 PM), removing short tracks (<10 seconds), and annotating each position with spatial zone membership (entry areas, seating, TB screening, sputum collection) via `preprocessing/prep_tracking_data.py`. These are light preprocessing steps that do not alter the tracking positions themselves.
+
+The raw Xovis JSON files and the raw entry/exit count data can be shared upon request by contacting the corresponding author.
+
 ### Shared in this repository
 
 The following preprocessed data files are included in `data-clean/`:
@@ -102,13 +114,14 @@ The following preprocessed data files are included in `data-clean/`:
 | `building/` | Building grid geometry: cell size, binary mask, valid positions, height, volume (`.npy` files) |
 | `environmental/` | CO2/temperature/humidity measurements and daily air exchange rate estimates |
 | `assumptions/` | 1,000 Monte Carlo draws of quanta generation and removal rates |
-| `tracking/unlinked/` | Preprocessed tracking positions for all 52 study dates (filtered and zone-annotated) |
 | `tracking/linked/` | Linked person movement tracks (52 dates) |
 | `tracking/linked-tb/` | TB-relevant linked tracks (52 dates) |
 | `tracking/linked-clinical/` | Track-to-TB-case-ID linkage tables (52 dates) |
 | `mapping_dates_interventions.csv` | Date-to-study-phase mapping |
 
-The preprocessed tracking data in `tracking/unlinked/` (output of `preprocessing/prep_tracking_data.py`) is also available on OSF: [https://doi.org/10.17605/OSF.IO/P3W24](https://doi.org/10.17605/OSF.IO/P3W24).
+**Person movement linkage.** The Xovis sensors assign a new track ID each time a person enters or re-enters the sensor field of view. Since persons may temporarily leave and re-enter (e.g., when visiting a consultation room), `preprocessing/link_tracking_interrupted_tracks.py` links interrupted tracks that likely belong to the same person using spatiotemporal criteria: time gap, spatial distance, and zone membership (seating, walking, TB check area). Linking is applied in 8 rounds of increasing permissiveness. The resulting linkage tables in `tracking/linked/` assign a unified `new_track_id` to each person's full visit.
+
+**TB patient identification.** TB patients were identified using a clinical questionnaire and linked to their tracking data. A research assistant manually matched each TB patient's clinic visit to a tracked person movement using an interactive Shiny application (`preprocessing/link_tb_app.R`). The resulting linkage in `tracking/linked-tb/` marks which tracks belong to TB patients, and `tracking/linked-clinical/` maps track IDs to clinical case IDs. Since this process requires the clinical data, the linkage tables are provided pre-computed.
 
 ### Clinical data (not shared)
 
@@ -120,10 +133,6 @@ Individual-level clinical data (`data-clean/clinical/tb_cases.csv`) is not share
 - `analysis/clinical.Rmd`
 
 However, all outputs produced by these scripts (linked-clinical tracking tables, modelling assumptions) are included in the repository, so the full modelling and analysis pipeline can still be reproduced.
-
-### Raw data (available upon request)
-
-The completely raw and unfiltered Xovis tracking data (JSON format, before any preprocessing) and the raw entry/exit count data can be shared upon request. Contact the corresponding author.
 
 ## Reproducing the results
 
@@ -228,6 +237,10 @@ To reproduce the complete preprocessing from the unlinked tracking data (already
 If you use this code or data, please cite the preprint:
 
 > Banholzer N, Muula G, Mureithi F, Banda E, Bittel P, Furrer L, Kronthaler D, Schmutz R, Egger M, Bolton C, Fenner L. "Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital: a modelling study based on person movements, environmental and clinical data." *medRxiv* (2025). DOI: [10.64898/2025.12.24.25342956](https://doi.org/10.64898/2025.12.24.25342956)
+
+If you use only the data, you may alternatively cite the OSF repository:
+
+> Banholzer N et al. "Data: Reducing spatial clustering to prevent tuberculosis transmission in a busy Zambian hospital." *OSF* (2025). DOI: [10.17605/OSF.IO/P3W24](https://doi.org/10.17605/OSF.IO/P3W24)
 
 For the spatiotemporal Wells-Riley model methodology, please also cite:
 
